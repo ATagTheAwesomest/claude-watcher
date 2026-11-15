@@ -71,7 +71,20 @@ export default class ClaudeWatcherPlugin extends Plugin {
       callback: () => void this.refresh(true),
     });
 
+    // Sidebar views restored at startup may wait to load until shown. Load ours
+    // when they are switched to, which the mobile sidebar does not always do.
+    this.registerEvent(
+      this.app.workspace.on("active-leaf-change", (leaf) => {
+        if (leaf && [CHAT_VIEW, APPROVALS_VIEW].includes(leaf.view.getViewType())) {
+          void leaf.loadIfDeferred?.();
+        }
+      }),
+    );
+
     this.app.workspace.onLayoutReady(() => {
+      for (const type of [CHAT_VIEW, APPROVALS_VIEW]) {
+        for (const leaf of this.app.workspace.getLeavesOfType(type)) void leaf.loadIfDeferred?.();
+      }
       this.startPolling();
       void this.refresh();
       void this.loadServerSyntax();

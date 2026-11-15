@@ -40,6 +40,14 @@ caught up, the approval is refused and nothing is released.
 
 The **Claude chat** panel works like a chat panel in a code editor.
 
+- Type a message at the bottom to start a chat at any time. Use **+** for a new
+  chat and the list at the top to go back to an earlier one.
+- Link notes in a message by typing `[[`, with the link button, or with the
+  button that links the current note. Only the note's path is sent. Claude sees
+  a linked note only if its title is marked `%` or `%%`, or when it asks for
+  more and you approve an excerpt on an approval card.
+- Links to notes in Claude's replies open the note when tapped.
+
 - In a note whose title ends with `%%`, write instructions as `<c: ...>`, such
   as `<c: summarise this into three bullet points>`. They may span several
   lines. The older `[c: ...]` form still works. Instructions are tinted in the
@@ -198,6 +206,7 @@ src/
 ├── rangePicker.ts     text with a draggable green selection
 ├── suggestions.ts     grouping and ranking of suggestions
 ├── chatView.ts        chat sidebar
+├── noteLinks.ts       linking notes in chat messages
 ├── edits.ts           pending edits in the editor, accept and reject
 ├── instructions.ts    finding <c: ...> instructions in a note
 ├── instructionHighlight.ts  tinting instructions in the editor

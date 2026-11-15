@@ -97,6 +97,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--size-4-2);
+  height: 100%;
+  padding-bottom: calc(var(--size-4-2) + env(safe-area-inset-bottom, 0px));
 }
 
 .cw-chat-toolbar {
@@ -184,6 +186,17 @@
 .cw-composer textarea {
   width: 100%;
   resize: vertical;
+}
+
+/* Sixteen pixels keeps iOS from zooming in when the box is tapped. */
+.is-mobile .cw-composer textarea {
+  font-size: 16px;
+}
+
+.cw-composer-links {
+  display: flex;
+  gap: var(--size-4-1);
+  margin-right: auto;
 }
 
 .cw-composer-row {
