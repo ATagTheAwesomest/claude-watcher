@@ -2,16 +2,19 @@ import { Events, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 
 import { WatcherClient } from "./api";
 import { APPROVALS_VIEW, ApprovalsView } from "./approvalsView";
+import { CHAT_VIEW, ChatView } from "./chatView";
 import { DEFAULT_SETTINGS, WatcherSettingTab, type WatcherSettings } from "./settings";
-import type { ApprovalRequest } from "./shared/types";
+import type { ApprovalRequest, PendingChange } from "./shared/types";
 
 export default class ClaudeWatcherPlugin extends Plugin {
   settings: WatcherSettings = { ...DEFAULT_SETTINGS };
   readonly client = new WatcherClient(() => this.settings);
-  /** Fires "approvals" when the list of pending requests is updated. */
+  /** Fires "approvals" and "changes" when those lists are updated. */
   readonly events = new Events();
   /** Requests waiting for the owner, as last fetched. */
   approvals: ApprovalRequest[] = [];
+  /** Claude's edits waiting for the owner, as last fetched. */
+  changes: PendingChange[] = [];
 
   private pollTimer: number | undefined;
   private seenApprovals = new Set<string>();
@@ -21,12 +24,32 @@ export default class ClaudeWatcherPlugin extends Plugin {
     await this.loadSettings();
     this.addSettingTab(new WatcherSettingTab(this.app, this));
     this.registerView(APPROVALS_VIEW, (leaf) => new ApprovalsView(leaf, this));
+    this.registerView(CHAT_VIEW, (leaf) => new ChatView(leaf, this));
 
     this.addRibbonIcon("shield-check", "Claude approvals", () => this.showView(APPROVALS_VIEW));
     this.addCommand({
       id: "open-approvals",
       name: "Open approvals",
       callback: () => this.showView(APPROVALS_VIEW),
+    });
+    this.addRibbonIcon("message-square", "Claude chat", () => this.showView(CHAT_VIEW));
+    this.addCommand({
+      id: "open-chat",
+      name: "Open chat",
+      callback: () => this.showView(CHAT_VIEW),
+    });
+    this.addCommand({
+      id: "send-instructions",
+      name: "Send this note's instructions to Claude",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        // Only "%%" notes carry instructions; the server checks the marker too.
+        if (!file || file.extension !== "md" || !/^%%|%%$/.test(file.basename.trim())) {
+          return false;
+        }
+        if (!checking) void this.sendInstructions(file);
+        return true;
+      },
     });
     this.addCommand({
       id: "check-now",
@@ -63,9 +86,13 @@ export default class ClaudeWatcherPlugin extends Plugin {
       return;
     }
     try {
-      this.approvals = await this.client.pendingApprovals();
+      [this.approvals, this.changes] = await Promise.all([
+        this.client.pendingApprovals(),
+        this.client.pendingChanges(),
+      ]);
       this.lastError = "";
       this.events.trigger("approvals");
+      this.events.trigger("changes");
       this.announceNewApprovals();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -93,14 +120,22 @@ export default class ClaudeWatcherPlugin extends Plugin {
     }
   }
 
-  async showView(type: string): Promise<void> {
+  /** Moves a note's "[c: ...]" instructions into the chat as the owner's message. */
+  async sendInstructions(file: TFile): Promise<void> {
+    const view = await this.showView(CHAT_VIEW);
+    if (view instanceof ChatView) await view.startFromNote(file);
+  }
+
+  async showView(type: string): Promise<unknown> {
     const { workspace } = this.app;
     let leaf: WorkspaceLeaf | null = workspace.getLeavesOfType(type)[0] ?? null;
     if (!leaf) {
       leaf = workspace.getRightLeaf(false);
       await leaf?.setViewState({ type, active: true });
     }
-    if (leaf) await workspace.revealLeaf(leaf);
+    if (!leaf) return undefined;
+    await workspace.revealLeaf(leaf);
+    return leaf.view;
   }
 
   private startPolling(): void {
