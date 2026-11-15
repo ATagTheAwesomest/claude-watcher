@@ -65,17 +65,69 @@ buttons.
 
 ## Installing
 
-The plugin is not in the community plugin list yet. To install it by hand:
+The plugin is not in the community plugin list yet. Install it with BRAT or
+by hand. You also need a running
+[Claude Watcher Server](https://github.com/ATagTheAwesomest/claude-watcher-server)
+and its API key.
+
+### With BRAT
+
+[BRAT](https://github.com/TfTHacker/obsidian42-brat) installs plugins from a
+GitHub repository and keeps them up to date.
+
+1. In Obsidian, open **Settings → Community plugins**, turn off Restricted
+   mode if it is on, then **Browse**, find **BRAT**, install and enable it.
+2. Open **Settings → BRAT** and choose **Add beta plugin**.
+3. Paste `https://github.com/ATagTheAwesomest/claude-watcher` and choose
+   **Add plugin**. Pick the latest version if asked.
+4. Under **Settings → Community plugins**, make sure **Claude Watcher** is
+   enabled.
+
+This works on desktop and mobile.
+
+### By hand
+
+1. Open the [latest release](https://github.com/ATagTheAwesomest/claude-watcher/releases/latest)
+   and download `manifest.json`, `main.js` and `styles.css`.
+2. In your vault, create the folder `.obsidian/plugins/claude-watcher/` and put
+   the three files in it. The `.obsidian` folder is hidden on most systems;
+   in Obsidian, **Settings → Community plugins → Installed plugins** has a
+   folder button that opens `.obsidian/plugins`.
+3. Restart Obsidian, or press the reload button next to **Installed plugins**,
+   then enable **Claude Watcher**.
+
+On mobile, put the files in a desktop vault and let Obsidian Sync carry them
+over, with **Installed community plugins** turned on in the Sync settings.
+
+### Connect to the server
+
+Open **Settings → Claude Watcher** and fill in:
+
+- **Server address**: where the server is reachable, such as
+  `https://watcher.example.com`.
+- **API key**: the server's `WATCHER_API_KEY`.
+
+Press **Test the connection** to check both. The **Claude approvals** and **Claude chat** panels then show requests from
+the server. Use the commands **Open approvals** and **Open chat** if they are
+not open.
+
+### Building from source
 
 ```sh
 npm install
 npm run build
 ```
 
-Copy `main.js`, `manifest.json` and `styles.css` into
-`<vault>/.obsidian/plugins/claude-watcher/`, then enable **Claude Watcher** under
-**Settings → Community plugins**. On mobile, copy the same three files into
-that folder through your sync.
+This writes `main.js` next to `manifest.json` and `styles.css`; copy the three
+files as above.
+
+### Releasing
+
+Bump the version in `manifest.json` and `package.json`, add it to
+`versions.json`, then push a tag with the same version, such as `0.1.1`. The
+Release workflow builds the plugin and attaches the three files to a GitHub
+release. It can also be started from the Actions tab, which tags the current
+commit with the version in `manifest.json`.
 
 ## Settings
 
