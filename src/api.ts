@@ -15,6 +15,7 @@ import type {
   ChatSession,
   ChatSessionList,
   PendingChangeList,
+  ServerSettings,
   SessionMessageBody,
   StartSessionBody,
 } from "./shared/types";
@@ -30,16 +31,6 @@ export class WatcherError extends Error {
   ) {
     super(message);
   }
-}
-
-/** Settings the server reports about itself. Read-only: they are set on the server. */
-export interface ServerSettings {
-  search: {
-    /** Who picks the search terms: Claude itself, plain keywords, or a local model. */
-    mode: string;
-    /** Most suggestions offered for one request. */
-    maxSuggestions: number;
-  };
 }
 
 export interface Connection {

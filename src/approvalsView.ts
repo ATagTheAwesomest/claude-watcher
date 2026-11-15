@@ -8,7 +8,7 @@ import { ItemView, Notice, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import { WatcherError } from "./api";
 import type ClaudeWatcherPlugin from "./main";
 import { RangePicker } from "./rangePicker";
-import { groupSuggestions, type Suggestion } from "./suggestions";
+import { groupSuggestions } from "./suggestions";
 import type { ApprovalRequest, NoteRange } from "./shared/types";
 import { describeRange, hashNote, rangeToSpan, spanToRange } from "./text";
 
@@ -111,7 +111,7 @@ export class ApprovalsView extends ItemView {
 
   private async fill(card: HTMLElement, approval: ApprovalRequest): Promise<void> {
     const header = card.createDiv({ cls: "cw-card-header" });
-    const rank = (approval as Suggestion).rank;
+    const rank = approval.rank;
     if (rank !== undefined) header.createSpan({ cls: "cw-rank", text: `#${rank} ` });
     const link = header.createEl("a", { text: approval.notePath, cls: "cw-note-link" });
     link.addEventListener("click", () => void this.plugin.openNote(approval.notePath));

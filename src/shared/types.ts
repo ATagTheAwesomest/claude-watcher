@@ -68,6 +68,10 @@ export interface ApprovalRequest {
   status: ApprovalStatus;
   /** ISO 8601 time the request was made. */
   createdAt: string;
+  /** Position among the suggestions of one search, 1 being the best match. */
+  rank?: number;
+  /** Shared by every suggestion that came from the same request by Claude. */
+  batchId?: string;
 }
 
 /** Response of `GET /approvals`. */
@@ -93,6 +97,26 @@ export interface MoreRequestBody {
   query: string;
   /** The note to look in, when Claude knows it. A "[PN] ..." mirror path also works. */
   notePath?: string;
+  /** Words or short phrases to search for, chosen by Claude. */
+  terms?: string[];
+  /** Regular expressions to search for, matched per line and ignoring case. */
+  patterns?: string[];
+}
+
+/**
+ * How the server finds excerpts. "claude" searches for the terms and
+ * patterns Claude sends, "keyword" for the words of its request, and
+ * "ollama" also asks a local model.
+ */
+export type SearchMode = "claude" | "keyword" | "ollama";
+
+/** Response of `GET /settings`. Read-only; the server's environment sets it. */
+export interface ServerSettings {
+  search: {
+    mode: SearchMode;
+    /** Most suggestions one request puts in front of the owner. */
+    maxSuggestions: number;
+  };
 }
 
 /**

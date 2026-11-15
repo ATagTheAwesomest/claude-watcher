@@ -1,7 +1,7 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 
 import type ClaudeWatcherPlugin from "./main";
-import type { TaskSize } from "./shared/types";
+import type { SearchMode, TaskSize } from "./shared/types";
 
 export interface WatcherSettings {
   /** Address of the watcher server, such as https://watcher.example.com. */
@@ -137,7 +137,7 @@ export class WatcherSettingTab extends PluginSettingTab {
   }
 }
 
-const SEARCH_MODES: Record<string, string> = {
+const SEARCH_MODES: Record<SearchMode, string> = {
   claude: "Claude chooses the search terms and the server searches the vault for them.",
   keyword: "The server searches the vault for the words of Claude's request.",
   ollama: "A local model chooses the search terms and trims the matches.",

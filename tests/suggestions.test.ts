@@ -17,7 +17,7 @@ function suggestion(
     status: "pending",
     createdAt,
     ...extra,
-  } as ApprovalRequest;
+  };
 }
 
 const ids = (batches: ApprovalRequest[][]) => batches.map((batch) => batch.map((a) => a.id));
