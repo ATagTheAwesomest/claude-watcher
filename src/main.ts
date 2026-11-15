@@ -1,4 +1,4 @@
-import { Events, Notice, debounce, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { Events, Notice, Platform, debounce, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 
 import { WatcherClient } from "./api";
 import { APPROVALS_VIEW, ApprovalsView } from "./approvalsView";
@@ -46,12 +46,57 @@ export default class ClaudeWatcherPlugin extends Plugin {
       name: "Open approvals",
       callback: () => this.showView(APPROVALS_VIEW),
     });
-    this.addRibbonIcon("message-square", "Claude chat", () => this.showView(CHAT_VIEW));
+    // A new chat needs no note and no instructions; one can be opened from anywhere.
+    this.addRibbonIcon("message-square-plus", "New Claude chat", () => void this.newChat());
+    this.addCommand({
+      id: "new-chat",
+      name: "New chat",
+      icon: "message-square-plus",
+      callback: () => void this.newChat(),
+    });
+    this.addCommand({
+      id: "new-chat-about-note",
+      name: "New chat about this note",
+      icon: "message-square-plus",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file || file.extension !== "md") return false;
+        if (!checking) void this.newChat(file);
+        return true;
+      },
+    });
     this.addCommand({
       id: "open-chat",
       name: "Open chat",
+      icon: "message-square",
       callback: () => this.showView(CHAT_VIEW),
     });
+    // The note menus ("..." on a phone, right click on a desktop).
+    this.registerEvent(
+      this.app.workspace.on("file-menu", (menu, file) => {
+        if (file instanceof TFile && file.extension === "md") {
+          menu.addItem((item) =>
+            item
+              .setTitle("New Claude chat about this note")
+              .setIcon("message-square-plus")
+              .onClick(() => void this.newChat(file)),
+          );
+        }
+      }),
+    );
+    this.registerEvent(
+      this.app.workspace.on("editor-menu", (menu, _editor, info) => {
+        const file = info.file;
+        if (file && file.extension === "md") {
+          menu.addItem((item) =>
+            item
+              .setTitle("New Claude chat about this note")
+              .setIcon("message-square-plus")
+              .onClick(() => void this.newChat(file)),
+          );
+        }
+      }),
+    );
     this.addCommand({
       id: "send-instructions",
       name: "Send this note's instructions to Claude",
@@ -182,16 +227,41 @@ export default class ClaudeWatcherPlugin extends Plugin {
     if (view instanceof ChatView) await view.startFromNote(file);
   }
 
+  /** Opens the chat on an empty conversation, with a link to `about` when given. */
+  async newChat(about?: TFile): Promise<void> {
+    const view = await this.showView(CHAT_VIEW);
+    if (view instanceof ChatView) view.newChat(about);
+  }
+
   async showView(type: string): Promise<unknown> {
-    const { workspace } = this.app;
-    let leaf: WorkspaceLeaf | null = workspace.getLeavesOfType(type)[0] ?? null;
-    if (!leaf) {
-      leaf = workspace.getRightLeaf(false);
-      await leaf?.setViewState({ type, active: true });
-    }
+    const leaf = await this.leafFor(type);
     if (!leaf) return undefined;
-    await workspace.revealLeaf(leaf);
+    await this.app.workspace.revealLeaf(leaf);
+    await leaf.loadIfDeferred?.();
     return leaf.view;
+  }
+
+  /**
+   * The leaf that shows a view. On a phone the chat opens as a full-screen tab,
+   * where the message box has room next to the keyboard; elsewhere views open
+   * in the right sidebar.
+   */
+  private async leafFor(type: string): Promise<WorkspaceLeaf | null> {
+    const { workspace } = this.app;
+    const leaves = workspace.getLeavesOfType(type);
+    if (type === CHAT_VIEW && Platform.isPhone) {
+      const inMain = leaves.find((leaf) => leaf.getRoot() === workspace.rootSplit);
+      if (inMain) return inMain;
+      // A chat left in the sidebar drawer by an earlier version is moved to a tab.
+      for (const leaf of leaves) leaf.detach();
+      const leaf = workspace.getLeaf("tab");
+      await leaf.setViewState({ type, active: true });
+      return leaf;
+    }
+    if (leaves[0]) return leaves[0];
+    const leaf = workspace.getRightLeaf(false);
+    await leaf?.setViewState({ type, active: true });
+    return leaf;
   }
 
   private startPolling(): void {
