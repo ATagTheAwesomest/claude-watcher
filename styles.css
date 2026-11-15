@@ -238,3 +238,9 @@
 .cw-rank {
   color: var(--text-muted);
 }
+
+/* Instructions in "%%" notes */
+.cw-instruction-mark {
+  background-color: rgba(var(--color-purple-rgb), 0.12);
+  border-radius: 3px;
+}

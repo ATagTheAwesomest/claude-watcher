@@ -1,5 +1,5 @@
 /**
- * The chat sidebar. A note's "[c: ...]" instructions become the owner's first
+ * The chat sidebar. A note's "<c: ...>" instructions become the owner's first
  * message, Claude's replies and proposed edits appear below, and follow-up
  * messages continue the same Claude Code session on the server.
  */
@@ -90,7 +90,7 @@ export class ChatView extends ItemView {
     window.clearTimeout(this.runTimer);
   }
 
-  /** Starts a conversation from the "[c: ...]" instructions of a note. */
+  /** Starts a conversation from the instructions of a note. */
   async startFromNote(file: TFile): Promise<void> {
     await this.run(() =>
       this.plugin.client.startSession({ notePath: file.path, task: this.task() }),
@@ -214,7 +214,7 @@ export class ChatView extends ItemView {
     el.scrollTop = el.scrollHeight;
   }
 
-  /** Shows the "[c: ...]" instructions a message points to, read from the vault. */
+  /** Shows the instructions a message points to, read from the vault. */
   private async renderInstructions(body: HTMLElement, message: ChatMessage): Promise<void> {
     const pointer = message.pointer!;
     const file = this.app.vault.getAbstractFileByPath(pointer.notePath);
