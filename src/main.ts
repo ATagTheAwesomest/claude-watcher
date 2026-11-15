@@ -1,14 +1,16 @@
-import { Events, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { Events, Notice, debounce, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 
 import { WatcherClient } from "./api";
 import { APPROVALS_VIEW, ApprovalsView } from "./approvalsView";
 import { CHAT_VIEW, ChatView } from "./chatView";
+import { EditReview } from "./edits";
 import { DEFAULT_SETTINGS, WatcherSettingTab, type WatcherSettings } from "./settings";
 import type { ApprovalRequest, PendingChange } from "./shared/types";
 
 export default class ClaudeWatcherPlugin extends Plugin {
   settings: WatcherSettings = { ...DEFAULT_SETTINGS };
   readonly client = new WatcherClient(() => this.settings);
+  readonly review = new EditReview(this);
   /** Fires "approvals" and "changes" when those lists are updated. */
   readonly events = new Events();
   /** Requests waiting for the owner, as last fetched. */
@@ -25,6 +27,13 @@ export default class ClaudeWatcherPlugin extends Plugin {
     this.addSettingTab(new WatcherSettingTab(this.app, this));
     this.registerView(APPROVALS_VIEW, (leaf) => new ApprovalsView(leaf, this));
     this.registerView(CHAT_VIEW, (leaf) => new ChatView(leaf, this));
+
+    this.registerEditorExtension(this.review.extension());
+    // Wait a moment after a note opens, so the editor holds its text.
+    const showEdits = debounce(() => void this.review.showInEditors(), 300, true);
+    this.registerEvent(this.events.on("changes", showEdits));
+    this.registerEvent(this.app.workspace.on("layout-change", showEdits));
+    this.registerEvent(this.app.workspace.on("file-open", showEdits));
 
     this.addRibbonIcon("shield-check", "Claude approvals", () => this.showView(APPROVALS_VIEW));
     this.addCommand({

@@ -254,6 +254,7 @@ export class ChatView extends ItemView {
             end: Math.max(change.endLine, change.startLine),
           }),
       );
+      this.plugin.review.buttons(row, change);
     }
   }
 

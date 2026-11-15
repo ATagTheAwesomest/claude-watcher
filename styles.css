@@ -192,3 +192,32 @@
   gap: var(--size-4-2);
   margin-top: var(--size-4-1);
 }
+
+/* Pending edits in the note */
+
+.cw-removed-line {
+  background: rgba(var(--color-red-rgb), 0.15);
+  text-decoration: line-through;
+  text-decoration-color: rgba(var(--color-red-rgb), 0.6);
+}
+
+.cw-change {
+  border-left: 3px solid var(--color-green);
+  padding: var(--size-4-1) var(--size-4-2);
+  margin: var(--size-4-1) 0;
+}
+
+.cw-added-line {
+  background: rgba(var(--color-green-rgb), 0.15);
+  white-space: pre-wrap;
+  font-family: var(--font-text);
+}
+
+.cw-change-label {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.cw-change-buttons {
+  margin-top: var(--size-4-1);
+}
