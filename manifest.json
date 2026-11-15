@@ -1,0 +1,10 @@
+{
+  "id": "claude-watcher",
+  "name": "Claude Watcher",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Approve what Claude may see of your notes, chat with it in a sidebar and accept or reject its edits.",
+  "author": "ATagTheAwesomest",
+  "authorUrl": "https://github.com/ATagTheAwesomest",
+  "isDesktopOnly": false
+}
