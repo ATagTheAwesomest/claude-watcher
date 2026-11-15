@@ -1,0 +1,14 @@
+node_modules/
+
+# Build output. Releases attach main.js, manifest.json and styles.css instead.
+main.js
+*.js.map
+
+# Local settings stay out of the repository
+.env
+.env.*
+*.local.*
+data.json
+
+*.log
+.DS_Store
