@@ -8,6 +8,7 @@ import { ItemView, Notice, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import { WatcherError } from "./api";
 import type ClaudeWatcherPlugin from "./main";
 import { RangePicker } from "./rangePicker";
+import { groupSuggestions, type Suggestion } from "./suggestions";
 import type { ApprovalRequest, NoteRange } from "./shared/types";
 import { describeRange, hashNote, rangeToSpan, spanToRange } from "./text";
 
@@ -52,40 +53,68 @@ export class ApprovalsView extends ItemView {
     this.update();
   }
 
-  /** Adds cards for new requests and removes settled ones, leaving the others as they are. */
+  /**
+   * Shows the suggestions of each request together, best match first. Cards
+   * already on screen are moved, not drawn again, so a selection the owner is
+   * adjusting is kept.
+   */
   private update(): void {
-    const approvals = this.plugin.approvals;
-    const ids = new Set(approvals.map((approval) => approval.id));
+    const batches = groupSuggestions(this.plugin.approvals);
+    const ids = new Set(this.plugin.approvals.map((approval) => approval.id));
     for (const [id, card] of this.cards) {
       if (!ids.has(id)) {
         card.remove();
         this.cards.delete(id);
       }
     }
-    for (const approval of approvals) {
-      if (!this.cards.has(approval.id)) this.redraw(approval);
-    }
-    this.listEl.toggleClass("is-empty", approvals.length === 0);
-    this.listEl.querySelector(".cw-empty")?.remove();
-    if (approvals.length === 0) {
+
+    const groups = batches.map((batch) => {
+      const group = createDiv({ cls: "cw-batch" });
+      const header = group.createDiv({ cls: "cw-batch-header" });
+      header.createDiv({ cls: "cw-query", text: `Claude is looking for: ${batch[0]!.query}` });
+      const row = header.createDiv({ cls: "cw-buttons" });
+      row.createSpan({
+        cls: "cw-range",
+        text: batch.length === 1 ? "1 suggestion" : `${batch.length} suggestions, best first`,
+      });
+      if (batch.length > 1) {
+        const rejectAll = row.createEl("button", { text: "Reject all" });
+        rejectAll.addEventListener("click", () =>
+          this.settle(row, async () => {
+            for (const approval of batch) await this.plugin.client.reject(approval.id);
+            return true;
+          }),
+        );
+      }
+      for (const approval of batch) {
+        const card = this.cards.get(approval.id);
+        if (card) group.appendChild(card);
+        else this.redraw(approval, group);
+      }
+      return group;
+    });
+    this.listEl.empty();
+    for (const group of groups) this.listEl.appendChild(group);
+    if (groups.length === 0) {
       this.listEl.createDiv({ cls: "cw-empty", text: "Nothing waiting for approval." });
     }
   }
 
-  private redraw(approval: ApprovalRequest): void {
+  private redraw(approval: ApprovalRequest, parent?: HTMLElement): void {
     const old = this.cards.get(approval.id);
     const card = createDiv({ cls: "cw-card" });
     if (old) old.replaceWith(card);
-    else this.listEl.appendChild(card);
+    else parent?.appendChild(card);
     this.cards.set(approval.id, card);
     void this.fill(card, approval);
   }
 
   private async fill(card: HTMLElement, approval: ApprovalRequest): Promise<void> {
     const header = card.createDiv({ cls: "cw-card-header" });
+    const rank = (approval as Suggestion).rank;
+    if (rank !== undefined) header.createSpan({ cls: "cw-rank", text: `#${rank} ` });
     const link = header.createEl("a", { text: approval.notePath, cls: "cw-note-link" });
     link.addEventListener("click", () => void this.plugin.openNote(approval.notePath));
-    card.createDiv({ cls: "cw-query", text: `Claude is looking for: ${approval.query}` });
     const rangeEl = card.createDiv({ cls: "cw-range" });
 
     const file = this.app.vault.getAbstractFileByPath(approval.notePath);

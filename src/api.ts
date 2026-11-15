@@ -32,6 +32,16 @@ export class WatcherError extends Error {
   }
 }
 
+/** Settings the server reports about itself. Read-only: they are set on the server. */
+export interface ServerSettings {
+  search: {
+    /** Who picks the search terms: Claude itself, plain keywords, or a local model. */
+    mode: string;
+    /** Most suggestions offered for one request. */
+    maxSuggestions: number;
+  };
+}
+
 export interface Connection {
   serverUrl: string;
   apiKey: string;
@@ -48,6 +58,16 @@ export class WatcherClient {
 
   health(): Promise<{ status: string }> {
     return this.call("GET", "/health");
+  }
+
+  /** The server's settings, or undefined for a server too old to report them. */
+  async serverSettings(): Promise<ServerSettings | undefined> {
+    try {
+      return await this.call<ServerSettings>("GET", "/settings");
+    } catch (error) {
+      if (error instanceof WatcherError && error.status === 404) return undefined;
+      throw error;
+    }
   }
 
   async pendingApprovals(): Promise<ApprovalRequest[]> {

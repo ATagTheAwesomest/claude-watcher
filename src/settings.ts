@@ -88,6 +88,8 @@ export class WatcherSettingTab extends PluginSettingTab {
           }),
       );
 
+    void this.showServerSettings(containerEl.createDiv());
+
     new Setting(containerEl).setName("Test the connection").addButton((button) =>
       button.setButtonText("Test").onClick(async () => {
         try {
@@ -99,4 +101,44 @@ export class WatcherSettingTab extends PluginSettingTab {
       }),
     );
   }
+
+  /** Shows the search settings the server uses. They are changed on the server, not here. */
+  private async showServerSettings(el: HTMLElement): Promise<void> {
+    new Setting(el).setName("Search on the server").setHeading();
+    const info = el.createDiv({ cls: "setting-item-description" });
+    if (!this.plugin.client.configured) {
+      info.setText("Fill in the server address and API key to see them.");
+      return;
+    }
+    info.setText("Loading…");
+    try {
+      const settings = await this.plugin.client.serverSettings();
+      if (!settings) {
+        info.setText("This server does not report its search settings. Update it to see them.");
+        return;
+      }
+      info.empty();
+      const { mode, maxSuggestions } = settings.search;
+      new Setting(el)
+        .setName("Search mode")
+        .setDesc(SEARCH_MODES[mode] ?? mode)
+        .addText((text) => text.setValue(mode).setDisabled(true));
+      new Setting(el)
+        .setName("Suggestions per request")
+        .setDesc("The most ranges offered for approval when Claude asks for more.")
+        .addText((text) => text.setValue(String(maxSuggestions)).setDisabled(true));
+      el.createDiv({
+        cls: "setting-item-description",
+        text: "These are set in the server's configuration and shown here for reference.",
+      });
+    } catch (error) {
+      info.setText(error instanceof Error ? error.message : String(error));
+    }
+  }
 }
+
+const SEARCH_MODES: Record<string, string> = {
+  claude: "Claude chooses the search terms and the server searches the vault for them.",
+  keyword: "The server searches the vault for the words of Claude's request.",
+  ollama: "A local model chooses the search terms and trims the matches.",
+};

@@ -221,3 +221,20 @@
 .cw-change-buttons {
   margin-top: var(--size-4-1);
 }
+
+.cw-batch {
+  margin-bottom: var(--size-4-4);
+}
+
+.cw-batch-header {
+  margin-bottom: var(--size-4-2);
+}
+
+.cw-batch-header .cw-query {
+  color: var(--text-normal);
+  font-weight: var(--font-semibold);
+}
+
+.cw-rank {
+  color: var(--text-muted);
+}
