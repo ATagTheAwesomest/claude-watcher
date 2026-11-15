@@ -11,7 +11,7 @@ export type NoteAccess =
   | "private"
   /** One percent sign in the title. Claude may read the whole note. */
   | "readable"
-  /** Two percent signs in the title. Readable, and its "[c: ...]" parts are instructions. */
+  /** Two percent signs in the title. Readable, and its "<c: ...>" parts are instructions. */
   | "instructions";
 
 /** A range of whole lines. Line numbers start at 1 and both ends are included. */
@@ -31,9 +31,15 @@ export interface CharRange {
 /** A selection inside a note, as shown on an approval card. */
 export type NoteRange = LineRange | CharRange;
 
-/** Where one "[c: ...]" instruction sits inside a note. */
+/**
+ * How instructions are written in a note: "angle" is "<c: ...>" (the older
+ * "[c: ...]" still counts), "square" is "[c: ...]" only.
+ */
+export type InstructionSyntax = "angle" | "square";
+
+/** Where one "<c: ...>" instruction sits inside a note. */
 export interface InstructionLocation {
-  /** First line of the instruction (the line holding the opening "[c:"). */
+  /** First line of the instruction (the line holding the opening "<c:" or "[c:"). */
   startLine: number;
   /** Last line of the instruction. */
   endLine: number;
@@ -117,6 +123,10 @@ export interface ServerSettings {
     /** Most suggestions one request puts in front of the owner. */
     maxSuggestions: number;
   };
+  instructions: {
+    /** How the owner writes instructions in notes. */
+    syntax: InstructionSyntax;
+  };
 }
 
 /**
@@ -139,7 +149,7 @@ export interface ChatMessage {
   /** What was written. May be empty when the owner's message is only a pointer. */
   text: string;
   /**
-   * Set when the owner's message is the "[c: ...]" instructions of a note.
+   * Set when the owner's message is the "<c: ...>" instructions of a note.
    * The plugin reads their text from the vault.
    */
   pointer?: InstructionPointer;
@@ -167,7 +177,7 @@ export interface ChatSessionList {
 }
 
 /**
- * Body of `POST /sessions`. Give a note with "[c: ...]" instructions, a
+ * Body of `POST /sessions`. Give a note with "<c: ...>" instructions, a
  * message, or both.
  */
 export interface StartSessionBody {

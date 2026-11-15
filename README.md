@@ -40,9 +40,21 @@ caught up, the approval is refused and nothing is released.
 
 The **Claude chat** panel works like a chat panel in a code editor.
 
-- In a note whose title ends with `%%`, run **Send this note's instructions to
-  Claude**. The note's `[c: ...]` instructions become your first message. They
-  stay in the note; the chat shows them with links back to their lines.
+- Type a message at the bottom to start a chat at any time. Use **+** for a new
+  chat and the list at the top to go back to an earlier one.
+- Link notes in a message by typing `[[`, with the link button, or with the
+  button that links the current note. Only the note's path is sent. Claude sees
+  a linked note only if its title is marked `%` or `%%`, or when it asks for
+  more and you approve an excerpt on an approval card.
+- Links to notes in Claude's replies open the note when tapped.
+
+- In a note whose title ends with `%%`, write instructions as `<c: ...>`, such
+  as `<c: summarise this into three bullet points>`. They may span several
+  lines. The older `[c: ...]` form still works. Instructions are tinted in the
+  editor so you can see what will be sent.
+- Run **Send this note's instructions to Claude**. The note's instructions
+  become your first message. They stay in the note; the chat shows them with
+  links back to their lines.
 - Claude's reply appears below, followed by the edits it proposes. Click an
   edit to jump to it in the note.
 - Keep writing to refine the result. Follow-up messages continue the same
@@ -131,13 +143,16 @@ commit with the version in `manifest.json`.
 
 ## Settings
 
-| Setting           | Meaning                                                              |
-| ----------------- | -------------------------------------------------------------------- |
-| Server address    | Where the server is reachable, such as `https://watcher.example.com` |
-| API key           | The server's `WATCHER_API_KEY`                                       |
-| Check every       | Seconds between checks for new requests and edits                    |
-| Default task size | Task size a new message starts with                                  |
+| Setting            | Meaning                                                              |
+| ------------------ | -------------------------------------------------------------------- |
+| Server address     | Where the server is reachable, such as `https://watcher.example.com` |
+| API key            | The server's `WATCHER_API_KEY`                                       |
+| Check every        | Seconds between checks for new requests and edits                    |
+| Default task size  | Task size a new message starts with                                  |
+| Instruction syntax | `<c: ...>` (default, also accepts `[c: ...]`) or `[c: ...]` only     |
 
+When the server reports its own instruction syntax (`WATCHER_INSTRUCTION_SYNTAX`),
+the plugin follows it and the setting shows that it is following the server.
 The tab also shows the server's search mode and the most suggestions it offers
 per request. Those are set on the server.
 
@@ -191,7 +206,10 @@ src/
 ├── rangePicker.ts     text with a draggable green selection
 ├── suggestions.ts     grouping and ranking of suggestions
 ├── chatView.ts        chat sidebar
+├── noteLinks.ts       linking notes in chat messages
 ├── edits.ts           pending edits in the editor, accept and reject
+├── instructions.ts    finding <c: ...> instructions in a note
+├── instructionHighlight.ts  tinting instructions in the editor
 ├── text.ts            ranges, hashes and applying changes
 └── shared/types.ts    API types copied from the server
 ```

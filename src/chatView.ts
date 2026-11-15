@@ -1,12 +1,14 @@
 /**
- * The chat sidebar. A note's "[c: ...]" instructions become the owner's first
- * message, Claude's replies and proposed edits appear below, and follow-up
- * messages continue the same Claude Code session on the server.
+ * The chat sidebar. Start a chat by typing a message, or from a note's
+ * "<c: ...>" instructions. Messages can link notes with [[...]]. Claude's
+ * replies and proposed edits appear below, and follow-up messages continue
+ * the same Claude Code session on the server.
  */
 
 import { ItemView, MarkdownRenderer, Notice, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 
 import type ClaudeWatcherPlugin from "./main";
+import { NotePicker, linkFor, linkTarget, resolveLinks } from "./noteLinks";
 import type { ChatMessage, ChatSession, PendingChange, TaskSize } from "./shared/types";
 
 export const CHAT_VIEW = "claude-watcher-chat";
@@ -61,12 +63,17 @@ export class ChatView extends ItemView {
     reload.addEventListener("click", () => void this.reload());
 
     this.messagesEl = root.createDiv({ cls: "cw-messages" });
+    this.messagesEl.addEventListener("click", (event) => this.followLink(event));
     this.editsEl = root.createDiv({ cls: "cw-edits" });
     this.statusEl = root.createDiv({ cls: "cw-status" });
 
     const composer = root.createDiv({ cls: "cw-composer" });
     this.inputEl = composer.createEl("textarea", {
-      attr: { placeholder: "Message Claude", rows: "3" },
+      attr: { placeholder: "Message Claude. Type [[ to link a note.", rows: "3" },
+    });
+    this.inputEl.addEventListener("input", () => {
+      const before = this.inputEl.value.slice(0, this.inputEl.selectionStart);
+      if (before.endsWith("[[")) this.pickNote(true);
     });
     this.inputEl.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
@@ -79,6 +86,19 @@ export class ChatView extends ItemView {
     this.taskEl.createEl("option", { value: "simple", text: "Simple task" });
     this.taskEl.createEl("option", { value: "complex", text: "Complex task" });
     this.taskEl.value = this.plugin.settings.defaultTask;
+    const links = row.createDiv({ cls: "cw-composer-links" });
+    const linkNote = links.createEl("button", { attr: { "aria-label": "Link a note" } });
+    setIcon(linkNote, "link");
+    linkNote.addEventListener("click", () => this.pickNote(false));
+    const linkCurrent = links.createEl("button", {
+      attr: { "aria-label": "Link the current note" },
+    });
+    setIcon(linkCurrent, "file-plus");
+    linkCurrent.addEventListener("click", () => {
+      const file = this.app.workspace.getActiveFile();
+      if (file) this.insert(linkFor(file));
+      else new Notice("Open a note first.");
+    });
     this.sendEl = row.createEl("button", { text: "Send", cls: "mod-cta" });
     this.sendEl.addEventListener("click", () => void this.send());
 
@@ -90,7 +110,7 @@ export class ChatView extends ItemView {
     window.clearTimeout(this.runTimer);
   }
 
-  /** Starts a conversation from the "[c: ...]" instructions of a note. */
+  /** Starts a conversation from the instructions of a note. */
   async startFromNote(file: TFile): Promise<void> {
     await this.run(() =>
       this.plugin.client.startSession({ notePath: file.path, task: this.task() }),
@@ -149,8 +169,36 @@ export class ChatView extends ItemView {
     }
   }
 
+  /** Lets the owner pick a note and links it at the cursor. After "[[", completes that link. */
+  private pickNote(afterBrackets: boolean): void {
+    new NotePicker(this.app, (file) => {
+      const link = linkFor(file);
+      this.insert(afterBrackets ? link.slice(2) : link);
+    }).open();
+  }
+
+  private insert(text: string): void {
+    const input = this.inputEl;
+    const at = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? at;
+    input.value = input.value.slice(0, at) + text + input.value.slice(end);
+    input.selectionStart = input.selectionEnd = at + text.length;
+    input.focus();
+  }
+
+  /** Opens the note behind a link in a message, if it is in the vault. */
+  private followLink(event: MouseEvent): void {
+    const link = (event.target as HTMLElement).closest("a.internal-link");
+    const href = link?.getAttribute("data-href") ?? link?.getAttribute("href");
+    if (!href) return;
+    event.preventDefault();
+    const file = linkTarget(this.app, href, this.session?.notePath ?? "");
+    if (file) void this.plugin.openNote(file.path);
+    else new Notice(`${href} is not in this vault.`);
+  }
+
   private async send(): Promise<void> {
-    const message = this.inputEl.value.trim();
+    const message = resolveLinks(this.app, this.inputEl.value.trim());
     if (message === "" || this.sendEl.disabled) return;
     const task = this.task();
     const session = this.session;
@@ -193,7 +241,7 @@ export class ChatView extends ItemView {
     if (!this.session) {
       el.createDiv({
         cls: "cw-empty",
-        text: "Start a chat below, or run “Send this note's instructions to Claude” on a %% note.",
+        text: "Write a message below to start a chat. Link notes with [[...]]; Claude only sees a linked note's path until you approve more. You can also run “Send this note's instructions to Claude” on a %% note.",
       });
       return;
     }
@@ -214,7 +262,7 @@ export class ChatView extends ItemView {
     el.scrollTop = el.scrollHeight;
   }
 
-  /** Shows the "[c: ...]" instructions a message points to, read from the vault. */
+  /** Shows the instructions a message points to, read from the vault. */
   private async renderInstructions(body: HTMLElement, message: ChatMessage): Promise<void> {
     const pointer = message.pointer!;
     const file = this.app.vault.getAbstractFileByPath(pointer.notePath);

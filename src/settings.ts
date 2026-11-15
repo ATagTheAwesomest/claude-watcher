@@ -1,7 +1,8 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 
 import type ClaudeWatcherPlugin from "./main";
-import type { SearchMode, TaskSize } from "./shared/types";
+import { SYNTAX_EXAMPLES } from "./instructions";
+import type { InstructionSyntax, SearchMode, TaskSize } from "./shared/types";
 
 export interface WatcherSettings {
   /** Address of the watcher server, such as https://watcher.example.com. */
@@ -12,6 +13,8 @@ export interface WatcherSettings {
   pollSeconds: number;
   /** Task size for new messages unless changed in the chat. */
   defaultTask: TaskSize;
+  /** How instructions are written in notes, unless the server reports its own. */
+  instructionSyntax: InstructionSyntax;
 }
 
 export const DEFAULT_SETTINGS: WatcherSettings = {
@@ -19,6 +22,7 @@ export const DEFAULT_SETTINGS: WatcherSettings = {
   apiKey: "",
   pollSeconds: 10,
   defaultTask: "simple",
+  instructionSyntax: "angle",
 };
 
 export class WatcherSettingTab extends PluginSettingTab {
@@ -88,7 +92,10 @@ export class WatcherSettingTab extends PluginSettingTab {
           }),
       );
 
-    void this.showServerSettings(containerEl.createDiv());
+    const syntaxSetting = new Setting(containerEl).setName("Instruction syntax");
+    this.renderSyntax(syntaxSetting);
+
+    void this.showServerSettings(containerEl.createDiv(), syntaxSetting);
 
     new Setting(containerEl).setName("Test the connection").addButton((button) =>
       button.setButtonText("Test").onClick(async () => {
@@ -103,7 +110,31 @@ export class WatcherSettingTab extends PluginSettingTab {
   }
 
   /** Shows the search settings the server uses. They are changed on the server, not here. */
-  private async showServerSettings(el: HTMLElement): Promise<void> {
+  private renderSyntax(setting: Setting): void {
+    const { plugin } = this;
+    const server = plugin.serverSyntax;
+    setting.controlEl.empty();
+    setting.setDesc(
+      server
+        ? `Following the server, which reads ${SYNTAX_EXAMPLES[server]}. Change it with WATCHER_INSTRUCTION_SYNTAX on the server.`
+        : "How instructions are written in %% notes. Angle brackets also accept the older [c: ...].",
+    );
+    setting.addDropdown((dropdown) =>
+      dropdown
+        .addOptions({
+          angle: `Angle brackets ${SYNTAX_EXAMPLES.angle}`,
+          square: `Square brackets ${SYNTAX_EXAMPLES.square}`,
+        })
+        .setValue(server ?? plugin.settings.instructionSyntax)
+        .setDisabled(server !== undefined)
+        .onChange(async (value) => {
+          plugin.settings.instructionSyntax = value as InstructionSyntax;
+          await plugin.saveSettings();
+        }),
+    );
+  }
+
+  private async showServerSettings(el: HTMLElement, syntaxSetting: Setting): Promise<void> {
     new Setting(el).setName("Search on the server").setHeading();
     const info = el.createDiv({ cls: "setting-item-description" });
     if (!this.plugin.client.configured) {
@@ -117,6 +148,9 @@ export class WatcherSettingTab extends PluginSettingTab {
         info.setText("This server does not report its search settings. Update it to see them.");
         return;
       }
+      const syntax = settings.instructions?.syntax;
+      this.plugin.setServerSyntax(syntax === "angle" || syntax === "square" ? syntax : undefined);
+      this.renderSyntax(syntaxSetting);
       info.empty();
       const { mode, maxSuggestions } = settings.search;
       new Setting(el)

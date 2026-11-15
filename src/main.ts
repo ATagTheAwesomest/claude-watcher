@@ -4,8 +4,10 @@ import { WatcherClient } from "./api";
 import { APPROVALS_VIEW, ApprovalsView } from "./approvalsView";
 import { CHAT_VIEW, ChatView } from "./chatView";
 import { EditReview } from "./edits";
+import { instructionHighlighter } from "./instructionHighlight";
+import { SYNTAX_EXAMPLES, findInstructions, hasInstructionMarker } from "./instructions";
 import { DEFAULT_SETTINGS, WatcherSettingTab, type WatcherSettings } from "./settings";
-import type { ApprovalRequest, PendingChange } from "./shared/types";
+import type { ApprovalRequest, InstructionSyntax, PendingChange } from "./shared/types";
 
 export default class ClaudeWatcherPlugin extends Plugin {
   settings: WatcherSettings = { ...DEFAULT_SETTINGS };
@@ -17,6 +19,8 @@ export default class ClaudeWatcherPlugin extends Plugin {
   approvals: ApprovalRequest[] = [];
   /** Claude's edits waiting for the owner, as last fetched. */
   changes: PendingChange[] = [];
+  /** The instruction syntax the server reports, which wins over the plugin setting. */
+  serverSyntax: InstructionSyntax | undefined;
 
   private pollTimer: number | undefined;
   private seenApprovals = new Set<string>();
@@ -29,6 +33,7 @@ export default class ClaudeWatcherPlugin extends Plugin {
     this.registerView(CHAT_VIEW, (leaf) => new ChatView(leaf, this));
 
     this.registerEditorExtension(this.review.extension());
+    this.registerEditorExtension(instructionHighlighter(this));
     // Wait a moment after a note opens, so the editor holds its text.
     const showEdits = debounce(() => void this.review.showInEditors(), 300, true);
     this.registerEvent(this.events.on("changes", showEdits));
@@ -53,7 +58,7 @@ export default class ClaudeWatcherPlugin extends Plugin {
       checkCallback: (checking) => {
         const file = this.app.workspace.getActiveFile();
         // Only "%%" notes carry instructions; the server checks the marker too.
-        if (!file || file.extension !== "md" || !/^%%|%%$/.test(file.basename.trim())) {
+        if (!file || file.extension !== "md" || !hasInstructionMarker(file.basename)) {
           return false;
         }
         if (!checking) void this.sendInstructions(file);
@@ -66,9 +71,23 @@ export default class ClaudeWatcherPlugin extends Plugin {
       callback: () => void this.refresh(true),
     });
 
+    // Sidebar views restored at startup may wait to load until shown. Load ours
+    // when they are switched to, which the mobile sidebar does not always do.
+    this.registerEvent(
+      this.app.workspace.on("active-leaf-change", (leaf) => {
+        if (leaf && [CHAT_VIEW, APPROVALS_VIEW].includes(leaf.view.getViewType())) {
+          void leaf.loadIfDeferred?.();
+        }
+      }),
+    );
+
     this.app.workspace.onLayoutReady(() => {
+      for (const type of [CHAT_VIEW, APPROVALS_VIEW]) {
+        for (const leaf of this.app.workspace.getLeavesOfType(type)) void leaf.loadIfDeferred?.();
+      }
       this.startPolling();
       void this.refresh();
+      void this.loadServerSyntax();
     });
   }
 
@@ -86,6 +105,29 @@ export default class ClaudeWatcherPlugin extends Plugin {
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
     this.startPolling();
+    this.app.workspace.updateOptions();
+  }
+
+  /** The syntax in use: the server's when it reports one, otherwise the plugin setting. */
+  instructionSyntax(): InstructionSyntax {
+    return this.serverSyntax ?? this.settings.instructionSyntax;
+  }
+
+  /** Asks the server which instruction syntax it uses. Older servers do not say. */
+  async loadServerSyntax(): Promise<void> {
+    if (!this.client.configured) return;
+    try {
+      const syntax = (await this.client.serverSettings())?.instructions?.syntax;
+      this.setServerSyntax(syntax === "angle" || syntax === "square" ? syntax : undefined);
+    } catch {
+      // Unreachable server: keep the plugin setting until the next try.
+    }
+  }
+
+  setServerSyntax(syntax: InstructionSyntax | undefined): void {
+    if (syntax === this.serverSyntax) return;
+    this.serverSyntax = syntax;
+    this.app.workspace.updateOptions();
   }
 
   /** Fetches what is waiting for the owner. With `loud`, errors are always shown. */
@@ -129,8 +171,13 @@ export default class ClaudeWatcherPlugin extends Plugin {
     }
   }
 
-  /** Moves a note's "[c: ...]" instructions into the chat as the owner's message. */
+  /** Moves a note's instructions into the chat as the owner's message. */
   async sendInstructions(file: TFile): Promise<void> {
+    const syntax = this.instructionSyntax();
+    if (findInstructions(await this.app.vault.cachedRead(file), syntax).length === 0) {
+      new Notice(`No ${SYNTAX_EXAMPLES[syntax]} instructions in this note.`);
+      return;
+    }
     const view = await this.showView(CHAT_VIEW);
     if (view instanceof ChatView) await view.startFromNote(file);
   }
