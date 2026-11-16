@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CHAT_VIEW, ChatView, EMPTY_STATE, NEW_CHAT } from "../src/chatView";
+import { CHAT_VIEW, ChatView, EMPTY_STATE, NEW_CHAT, describeError } from "../src/chatView";
 import { WatcherError } from "../src/api";
 import ClaudeWatcherPlugin from "../src/main";
 import type { ChatSession } from "../src/shared/types";
@@ -181,7 +181,7 @@ describe("a new chat about a note", () => {
 });
 
 describe("a chat the server no longer has", () => {
-  const gone = () => new WatcherError(404, "not_found", "No such conversation");
+  const gone = () => new WatcherError(404, "not_found", "No such conversation", "GET /sessions/s1");
 
   function picker(): HTMLSelectElement {
     return chat().contentEl.querySelector<HTMLSelectElement>(".cw-chat-toolbar select")!;
@@ -236,5 +236,37 @@ describe("a new chat asked for before the panel is built", () => {
     await view.onOpen();
     expect(view.contentEl.querySelector("textarea")!.value).toBe("[[Projects/Garden plan.md]] ");
     expect(view.contentEl.querySelector(".cw-chat-empty")).not.toBeNull();
+  });
+});
+
+describe("errors in the chat panel", () => {
+  it("names the request that failed", () => {
+    const error = new WatcherError(404, "not_found", "No such conversation", "GET /sessions/s1");
+    expect(describeError(error)).toBe("No such conversation (GET /sessions/s1)");
+  });
+
+  it("says which chat the server did not have", async () => {
+    command("open-chat").callback!();
+    await settle();
+    client.session!.mockRejectedValueOnce(
+      new WatcherError(404, "not_found", "No such conversation", "GET /sessions/s1"),
+    );
+    const picker = chat().contentEl.querySelector<HTMLSelectElement>(".cw-chat-toolbar select")!;
+    picker.value = "s1";
+    picker.dispatchEvent(new Event("change"));
+    await settle();
+    expect(chat().contentEl.querySelector(".cw-status")!.textContent).toContain("GET /sessions/s1");
+  });
+
+  it("shows why the panel could not be built instead of a blank screen", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    plugin.events.on = () => {
+      throw new Error("boom");
+    };
+    command("open-chat").callback!();
+    await settle();
+    const broken = chat().contentEl.querySelector(".cw-chat-broken");
+    expect(broken?.textContent).toContain("The chat could not be shown");
+    expect(broken?.textContent).toContain("boom");
   });
 });

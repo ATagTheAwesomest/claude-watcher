@@ -231,11 +231,14 @@ export default class ClaudeWatcherPlugin extends Plugin {
   async newChat(about?: TFile): Promise<void> {
     const view = await this.showView(CHAT_VIEW);
     if (view instanceof ChatView) view.newChat(about);
+    else new Notice("The chat panel could not be opened. Close its tab and try again.");
   }
 
   async showView(type: string): Promise<unknown> {
     const leaf = await this.leafFor(type);
     if (!leaf) return undefined;
+    // Load first, so the tab is never revealed while it is still empty.
+    await leaf.loadIfDeferred?.();
     await this.app.workspace.revealLeaf(leaf);
     await leaf.loadIfDeferred?.();
     return leaf.view;
