@@ -93,6 +93,31 @@ without it. Removing the chip withdraws the request.
 This needs a watcher server that accepts message context. An older server
 ignores the chips and cannot take private selections; the plugin says so.
 
+### Asking Claude about an excerpt
+
+Select text in a note and choose **Ask Claude about this excerpt** from the
+note's menu (right click, or the editor menu on a phone), or run the command of
+the same name, which can go in the mobile toolbar. The chat opens with the
+excerpt attached as a chip; type a question, or send as is to have Claude
+explain it. On a desktop the message box is ready to type in.
+
+In a private note, choosing this is your approval of exactly the selected text,
+so no approval card is shown. The plugin saves the note, sends the server the
+selection's character range and the note's hash, and the server writes just
+that text into the note's `[PN]` file. If the server's copy of the note has
+not caught up with sync yet, the plugin waits a few seconds and tries again.
+
+The excerpt is shared for that chat only:
+
+- Remove its chip, before sending or later from the sent message, and its text
+  leaves the mirror. The sent chip then shows it as ended.
+- It expires on its own when the chat has gone unused for a day.
+- Another chat is not told about it.
+
+In a shared note the selection is simply attached by its lines, since Claude
+can read the note already. This needs a watcher server with excerpt support;
+an older one is reported in a notice.
+
 - In a note whose title ends with `%%`, write instructions as `<c: ...>`, such
   as `<c: summarise this into three bullet points>`. They may span several
   lines. The older `[c: ...]` form still works. Instructions are tinted in the
@@ -220,6 +245,7 @@ example through a Cloudflare Tunnel.
 | Open chat                               | Opens the chat panel on the latest chat    |
 | Send this note's instructions to Claude | Starts a chat from the current `%%` note   |
 | Add selection to chat                   | Attaches the selected lines, or the note   |
+| Ask Claude about this excerpt           | Shares the selection with the chat at once |
 | Check for requests now                  | Asks the server for new requests and edits |
 
 ## Development

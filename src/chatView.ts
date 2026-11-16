@@ -16,6 +16,7 @@ import {
 } from "obsidian";
 
 import { WatcherError } from "./api";
+import type { ContextChip } from "./chatContext";
 import { chipsOf, renderChips } from "./contextBar";
 import type ClaudeWatcherPlugin from "./main";
 import { NotePicker, linkFor, linkTarget, resolveLinks } from "./noteLinks";
@@ -40,6 +41,12 @@ const RUN_POLL_MS = 2000;
  * falls back to its text ("New chat"), which would be sent as a conversation id.
  */
 export const NEW_CHAT = "new";
+
+const PLACEHOLDER = "Ask Claude about your notes. Type [[ to link one.";
+const ASK_PLACEHOLDER = "Ask about the excerpt, or send as is to have Claude explain it.";
+
+/** Sent when the owner sends an attached excerpt with no question. */
+export const DEFAULT_EXCERPT_QUESTION = "Tell me about this excerpt.";
 
 export class ChatView extends ItemView {
   private session: ChatSession | undefined;
@@ -128,7 +135,7 @@ export class ChatView extends ItemView {
     // A message held for approvals goes once they are settled.
     this.registerEvent(this.plugin.events.on("context-ready", () => void this.send()));
     this.inputEl = composer.createEl("textarea", {
-      attr: { placeholder: "Ask Claude about your notes. Type [[ to link one.", rows: "3" },
+      attr: { placeholder: PLACEHOLDER, rows: "3" },
     });
     this.inputEl.addEventListener("input", () => {
       const before = this.inputEl.value.slice(0, this.inputEl.selectionStart);
@@ -205,6 +212,17 @@ export class ChatView extends ItemView {
     if (about) this.insert(`${linkFor(about)} `, false);
     // On iOS, focusing the box while the panel opens scrolls the whole app out
     // of view and leaves a black screen. On mobile the owner taps the box instead.
+    if (!Platform.isMobile) this.focusInput();
+  }
+
+  /**
+   * After "Ask Claude about this excerpt": the excerpt is attached, and the
+   * message box waits for a question. Sending it empty asks about the excerpt.
+   */
+  readyForQuestion(): void {
+    if (!this.built) return;
+    this.inputEl.setAttribute("placeholder", ASK_PLACEHOLDER);
+    // On iOS focusing while the panel opens leaves a black screen; the owner taps the box.
     if (!Platform.isMobile) this.focusInput();
   }
 
@@ -330,7 +348,9 @@ export class ChatView extends ItemView {
   }
 
   private async send(): Promise<void> {
-    const message = resolveLinks(this.app, this.inputEl.value.trim());
+    let message = resolveLinks(this.app, this.inputEl.value.trim());
+    // An attached excerpt is a question on its own.
+    if (message === "" && this.plugin.context.hasExcerpts()) message = DEFAULT_EXCERPT_QUESTION;
     if (message === "" || this.sendEl.disabled) return;
     // Private selections wait for approval; the message is sent once they are settled.
     this.sendEl.disabled = true;
@@ -360,6 +380,7 @@ export class ChatView extends ItemView {
     });
     if (ok) {
       this.inputEl.value = "";
+      this.inputEl.setAttribute("placeholder", PLACEHOLDER);
       this.plugin.context.clearAdded();
     }
   }
@@ -370,6 +391,19 @@ export class ChatView extends ItemView {
       remove: (chip) => void this.plugin.contextApprovals.remove(chip),
       open: (chip) => void this.openChip(chip.notePath, chip.lines),
     });
+  }
+
+  /** Takes back an excerpt sent earlier in this chat, then shows the chat again. */
+  private async withdrawSent(chip: ContextChip): Promise<void> {
+    if (!(await this.plugin.contextApprovals.withdraw(chip))) return;
+    const id = this.session?.id;
+    if (!id) return;
+    try {
+      const session = await this.plugin.client.session(id);
+      if (session.id === this.session?.id) this.show(session);
+    } catch (error) {
+      if (!this.forgetIfGone(error, id)) this.fail(error);
+    }
   }
 
   private async openChip(notePath: string, lines?: { start: number; end: number }) {
@@ -485,6 +519,9 @@ export class ChatView extends ItemView {
           chipsOf(message.context),
           {
             open: (chip) => void this.openChip(chip.notePath, chip.lines),
+            // An excerpt shared for the chat can be taken back later on.
+            remove: (chip) => void this.withdrawSent(chip),
+            removable: (chip) => chip.excerpt === true && chip.state === "approved",
           },
         );
       }

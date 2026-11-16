@@ -150,8 +150,13 @@ class Workspace extends Events {
   constructor(private app: App) {
     super();
   }
+  /** The view `getActiveViewOfType` returns, whatever type is asked for. */
+  activeView: unknown = null;
   getActiveFile() {
     return this.activeFile;
+  }
+  getActiveViewOfType() {
+    return this.activeView;
   }
   getLeavesOfType(type: string) {
     return this.leaves.filter((leaf) => leaf.view?.getViewType() === type);
