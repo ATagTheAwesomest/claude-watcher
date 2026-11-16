@@ -7,13 +7,18 @@ import { EditReview } from "./edits";
 import { instructionHighlighter } from "./instructionHighlight";
 import { SYNTAX_EXAMPLES, findInstructions, hasInstructionMarker } from "./instructions";
 import { DEFAULT_SETTINGS, WatcherSettingTab, type WatcherSettings } from "./settings";
-import type { ApprovalRequest, InstructionSyntax, PendingChange } from "./shared/types";
+import type {
+  ApprovalRequest,
+  ClaudeOptions,
+  InstructionSyntax,
+  PendingChange,
+} from "./shared/types";
 
 export default class ClaudeWatcherPlugin extends Plugin {
   settings: WatcherSettings = { ...DEFAULT_SETTINGS };
   readonly client = new WatcherClient(() => this.settings);
   readonly review = new EditReview(this);
-  /** Fires "approvals" and "changes" when those lists are updated. */
+  /** Fires "approvals" and "changes" when those lists are updated, "claude-options" when the server's models change. */
   readonly events = new Events();
   /** Requests waiting for the owner, as last fetched. */
   approvals: ApprovalRequest[] = [];
@@ -21,6 +26,8 @@ export default class ClaudeWatcherPlugin extends Plugin {
   changes: PendingChange[] = [];
   /** The instruction syntax the server reports, which wins over the plugin setting. */
   serverSyntax: InstructionSyntax | undefined;
+  /** The models and effort levels the server offers. Older servers do not say. */
+  claudeOptions: ClaudeOptions | undefined;
 
   private pollTimer: number | undefined;
   private seenApprovals = new Set<string>();
@@ -132,7 +139,7 @@ export default class ClaudeWatcherPlugin extends Plugin {
       }
       this.startPolling();
       void this.refresh();
-      void this.loadServerSyntax();
+      void this.loadServerSettings();
     });
   }
 
@@ -158,15 +165,28 @@ export default class ClaudeWatcherPlugin extends Plugin {
     return this.serverSyntax ?? this.settings.instructionSyntax;
   }
 
-  /** Asks the server which instruction syntax it uses. Older servers do not say. */
-  async loadServerSyntax(): Promise<void> {
+  /**
+   * Asks the server which instruction syntax it uses and which models it
+   * offers. Older servers do not say.
+   */
+  async loadServerSettings(): Promise<void> {
     if (!this.client.configured) return;
     try {
-      const syntax = (await this.client.serverSettings())?.instructions?.syntax;
+      const settings = await this.client.serverSettings();
+      const syntax = settings?.instructions?.syntax;
       this.setServerSyntax(syntax === "angle" || syntax === "square" ? syntax : undefined);
+      this.setClaudeOptions(settings?.claude);
     } catch {
-      // Unreachable server: keep the plugin setting until the next try.
+      // Unreachable server: keep what is known until the next try.
     }
+  }
+
+  setClaudeOptions(options: ClaudeOptions | undefined): void {
+    const valid = options && Array.isArray(options.models) && options.models.length > 0;
+    const next = valid ? options : undefined;
+    if (JSON.stringify(next) === JSON.stringify(this.claudeOptions)) return;
+    this.claudeOptions = next;
+    this.events.trigger("claude-options");
   }
 
   setServerSyntax(syntax: InstructionSyntax | undefined): void {

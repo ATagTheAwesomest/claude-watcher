@@ -18,6 +18,15 @@ import {
 import { WatcherError } from "./api";
 import type ClaudeWatcherPlugin from "./main";
 import { NotePicker, linkFor, linkTarget, resolveLinks } from "./noteLinks";
+import {
+  DEFAULT_EFFORT,
+  EFFORT_LABELS,
+  choiceFields,
+  choiceFor,
+  defaultEffortLabel,
+  modelLabel,
+  type RunChoice,
+} from "./runChoice";
 import type { ChatMessage, ChatSession, PendingChange, TaskSize } from "./shared/types";
 
 export const CHAT_VIEW = "claude-watcher-chat";
@@ -39,7 +48,15 @@ export class ChatView extends ItemView {
   private editsEl!: HTMLElement;
   private statusEl!: HTMLElement;
   private inputEl!: HTMLTextAreaElement;
+  /** Model and effort pickers, shown when the server lists its models. */
+  private modelEl!: HTMLSelectElement;
+  private effortEl!: HTMLSelectElement;
+  /** Task size picker, for servers too old to list their models. */
   private taskEl!: HTMLSelectElement;
+  /** The model and effort picked for each chat, by id, "new" for an unsent one. */
+  private choices = new Map<string, RunChoice>();
+  /** The chat the pickers were last set for. */
+  private choiceKey: string | undefined;
   private sendEl!: HTMLButtonElement;
   private runTimer: number | undefined;
   /** True while the owner is on a new, unsent chat, so a reload keeps it. */
@@ -115,11 +132,23 @@ export class ChatView extends ItemView {
         void this.send();
       }
     });
+    const pickers = composer.createDiv({ cls: "cw-composer-row cw-run-choice" });
+    this.modelEl = pickers.createEl("select", {
+      cls: "dropdown cw-model",
+      attr: { "aria-label": "Model" },
+    });
+    this.effortEl = pickers.createEl("select", {
+      cls: "dropdown cw-effort",
+      attr: { "aria-label": "Thinking effort" },
+    });
+    this.taskEl = pickers.createEl("select", { cls: "dropdown cw-task" });
+    this.taskEl.createEl("option", { text: "Simple task" }).value = "simple";
+    this.taskEl.createEl("option", { text: "Complex task" }).value = "complex";
+    this.taskEl.value = "simple";
+    for (const picker of [this.modelEl, this.effortEl]) {
+      picker.addEventListener("change", () => this.rememberChoice());
+    }
     const row = composer.createDiv({ cls: "cw-composer-row" });
-    this.taskEl = row.createEl("select", { cls: "dropdown" });
-    this.taskEl.createEl("option", { value: "simple", text: "Simple task" });
-    this.taskEl.createEl("option", { value: "complex", text: "Complex task" });
-    this.taskEl.value = this.plugin.settings.defaultTask;
     const links = row.createDiv({ cls: "cw-composer-links" });
     const linkNote = links.createEl("button", { attr: { "aria-label": "Link a note" } });
     setIcon(linkNote, "link");
@@ -137,7 +166,14 @@ export class ChatView extends ItemView {
     this.sendEl.addEventListener("click", () => void this.send());
 
     this.registerEvent(this.plugin.events.on("changes", () => this.renderEdits()));
+    this.registerEvent(
+      this.plugin.events.on("claude-options", () => {
+        this.choiceKey = undefined;
+        this.renderChoice();
+      }),
+    );
     this.built = true;
+    this.renderChoice();
     const pending = this.pendingNewChat;
     this.pendingNewChat = undefined;
     if (pending) this.newChat(pending.about);
@@ -171,7 +207,7 @@ export class ChatView extends ItemView {
   /** Starts a conversation from the instructions of a note. */
   async startFromNote(file: TFile): Promise<void> {
     await this.run(() =>
-      this.plugin.client.startSession({ notePath: file.path, task: this.task() }),
+      this.plugin.client.startSession({ notePath: file.path, ...this.runFields() }),
     );
   }
 
@@ -226,6 +262,7 @@ export class ChatView extends ItemView {
       this.sessions.unshift(session);
     }
     this.renderPicker();
+    this.renderChoice();
     this.renderMessages().catch((error: unknown) => {
       console.error("Claude Watcher: could not show the messages", error);
       this.messagesEl.empty();
@@ -287,18 +324,18 @@ export class ChatView extends ItemView {
   private async send(): Promise<void> {
     const message = resolveLinks(this.app, this.inputEl.value.trim());
     if (message === "" || this.sendEl.disabled) return;
-    const task = this.task();
+    const fields = this.runFields();
     const session = this.session;
     const ok = await this.run(async () => {
-      if (!session) return this.plugin.client.startSession({ message, task });
+      if (!session) return this.plugin.client.startSession({ message, ...fields });
       try {
-        return await this.plugin.client.sendMessage(session.id, { message, task });
+        return await this.plugin.client.sendMessage(session.id, { message, ...fields });
       } catch (error) {
         // The chat is gone from the server: the message starts a new one instead.
         if (!(error instanceof WatcherError) || error.status !== 404) throw error;
         this.sessions = this.sessions.filter((s) => s.id !== session.id);
         new Notice("That chat is no longer on the server. Your message starts a new chat.");
-        return this.plugin.client.startSession({ message, task });
+        return this.plugin.client.startSession({ message, ...fields });
       }
     });
     if (ok) this.inputEl.value = "";
@@ -306,8 +343,13 @@ export class ChatView extends ItemView {
 
   private async run(request: () => Promise<ChatSession>): Promise<boolean> {
     this.sendEl.disabled = true;
+    const key = this.session?.id ?? NEW_CHAT;
     try {
-      this.show(await request());
+      const session = await request();
+      // The server now records the pick with the chat, so it is shown from there.
+      this.choices.delete(key);
+      if (key === this.choiceKey) this.choiceKey = undefined;
+      this.show(session);
       return true;
     } catch (error) {
       this.fail(error);
@@ -318,6 +360,58 @@ export class ChatView extends ItemView {
 
   private task(): TaskSize {
     return this.taskEl.value === "complex" ? "complex" : "simple";
+  }
+
+  /** The model and effort, or the task size for an older server, to send with a message. */
+  private runFields(): ReturnType<typeof choiceFields> {
+    const options = this.plugin.claudeOptions;
+    const choice = options ? this.pickedChoice() : undefined;
+    return choiceFields(options, choice, this.task());
+  }
+
+  private pickedChoice(): RunChoice {
+    const effort = this.effortEl.value;
+    return {
+      model: this.modelEl.value,
+      effort: effort === "" ? DEFAULT_EFFORT : (effort as RunChoice["effort"]),
+    };
+  }
+
+  /** Keeps a changed pick for the chat on screen, so switching chats does not lose it. */
+  private rememberChoice(): void {
+    if (!this.plugin.claudeOptions) return;
+    this.choices.set(this.session?.id ?? NEW_CHAT, this.pickedChoice());
+  }
+
+  /**
+   * Sets the pickers for the chat on screen: the pick made for it here, the
+   * model and effort it last ran with, or the defaults. Left alone while the
+   * same chat stays on screen, so a poll does not undo a pick.
+   */
+  private renderChoice(): void {
+    if (!this.built) return;
+    const options = this.plugin.claudeOptions;
+    this.modelEl.toggleClass("cw-hidden", options === undefined);
+    this.effortEl.toggleClass("cw-hidden", options === undefined);
+    this.taskEl.toggleClass("cw-hidden", options !== undefined);
+    if (!options) return;
+
+    const key = this.session?.id ?? NEW_CHAT;
+    if (key === this.choiceKey) return;
+    this.choiceKey = key;
+    const choice = this.choices.get(key) ?? choiceFor(options, this.plugin.settings, this.session);
+
+    this.modelEl.empty();
+    for (const model of options.models) {
+      this.modelEl.createEl("option", { text: modelLabel(options, model.id) }).value = model.id;
+    }
+    this.modelEl.value = choice.model;
+    this.effortEl.empty();
+    this.effortEl.createEl("option", { text: defaultEffortLabel(options) }).value = DEFAULT_EFFORT;
+    for (const effort of options.efforts) {
+      this.effortEl.createEl("option", { text: EFFORT_LABELS[effort] ?? effort }).value = effort;
+    }
+    this.effortEl.value = choice.effort;
   }
 
   private renderPicker(): void {
