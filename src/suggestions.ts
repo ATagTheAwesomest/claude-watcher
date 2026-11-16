@@ -10,7 +10,9 @@ import type { ApprovalRequest } from "./shared/types";
 export function groupSuggestions(approvals: ApprovalRequest[]): ApprovalRequest[][] {
   const batches = new Map<string, ApprovalRequest[]>();
   for (const approval of approvals) {
-    const key = approval.batchId ?? `${approval.createdAt}\0${approval.query}`;
+    const key =
+      approval.batchId ??
+      (approval.source === "owner" ? approval.id : `${approval.createdAt}\0${approval.query}`);
     const batch = batches.get(key) ?? [];
     batch.push(approval);
     batches.set(key, batch);

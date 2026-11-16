@@ -78,6 +78,22 @@ export interface ApprovalRequest {
   rank?: number;
   /** Shared by every suggestion that came from the same request by Claude. */
   batchId?: string;
+  /**
+   * Who asked: Claude through the request tool (the default), or the owner,
+   * who added a selection of a private note to a chat message.
+   */
+  source?: "claude" | "owner";
+}
+
+/**
+ * Body of `POST /approvals`: the owner adds a selection of a private note to
+ * the chat. It becomes a pending request like Claude's, and nothing reaches
+ * the mirror until the owner approves it.
+ */
+export interface OwnerApprovalBody {
+  /** Note path relative to the vault root, using forward slashes. */
+  notePath: string;
+  range: NoteRange;
 }
 
 /** Response of `GET /approvals`. */
@@ -177,6 +193,22 @@ export interface MoreRequestStatus {
  */
 export type TaskSize = "simple" | "complex";
 
+/**
+ * A note, or some of its lines, that the owner attached to a chat message. It
+ * holds a path and line numbers, never text: Claude reads a shared note in the
+ * mirror, and sees a private one only through an approved excerpt.
+ */
+export interface ChatContext {
+  /** Note path relative to the vault root, using forward slashes. */
+  notePath: string;
+  /** First line of the selection. Leave both lines out for the whole note. */
+  startLine?: number;
+  /** Last line of the selection, included. */
+  endLine?: number;
+  /** For a private note: the approval request that released the selection. */
+  approvalId?: string;
+}
+
 /** One message in a sidebar conversation. */
 export interface ChatMessage {
   role: "owner" | "claude";
@@ -187,6 +219,8 @@ export interface ChatMessage {
    * The plugin reads their text from the vault.
    */
   pointer?: InstructionPointer;
+  /** Notes and selections the owner attached to the message. */
+  context?: ChatContext[];
   /** On an owner's message: the model and effort it was sent with. */
   model?: string;
   effort?: EffortLevel;
@@ -224,6 +258,8 @@ export interface ChatSessionList {
 export interface StartSessionBody {
   notePath?: string;
   message?: string;
+  /** Notes and selections attached to the message. */
+  context?: ChatContext[];
   /** One of the server's models. Takes precedence over `task`. */
   model?: string;
   /** One of the server's effort levels, or "default" for the server's default. */
@@ -235,6 +271,8 @@ export interface StartSessionBody {
 /** Body of `POST /sessions/:id/messages`. */
 export interface SessionMessageBody {
   message: string;
+  /** Notes and selections attached to the message. */
+  context?: ChatContext[];
   /** One of the server's models. Left out, with no task, the conversation's model is kept. */
   model?: string;
   /** One of the server's effort levels, or "default" for the server's default. Left out, the conversation's effort is kept. */

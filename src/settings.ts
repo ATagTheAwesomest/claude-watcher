@@ -18,6 +18,10 @@ export interface WatcherSettings {
   defaultEffort: EffortLevel | "";
   /** How instructions are written in notes, unless the server reports its own. */
   instructionSyntax: InstructionSyntax;
+  /** Show the "Lines 12-18 +" button under a selection in a note. */
+  selectionButton: boolean;
+  /** Attach the open note to chat messages when Claude can already read it. */
+  includeOpenNote: boolean;
 }
 
 export const DEFAULT_SETTINGS: WatcherSettings = {
@@ -27,6 +31,8 @@ export const DEFAULT_SETTINGS: WatcherSettings = {
   defaultModel: "",
   defaultEffort: "",
   instructionSyntax: "angle",
+  selectionButton: true,
+  includeOpenNote: true,
 };
 
 export class WatcherSettingTab extends PluginSettingTab {
@@ -93,6 +99,29 @@ export class WatcherSettingTab extends PluginSettingTab {
     void this.showServerSettings(containerEl.createDiv(), syntaxSetting, () =>
       this.renderChoiceDefaults(modelSetting, effortSetting),
     );
+
+    new Setting(containerEl)
+      .setName("Selection button")
+      .setDesc("Show a button under selected text in a note that adds those lines to the chat.")
+      .addToggle((toggle) =>
+        toggle.setValue(settings.selectionButton).onChange(async (value) => {
+          settings.selectionButton = value;
+          await this.plugin.saveSettings();
+        }),
+      );
+
+    new Setting(containerEl)
+      .setName("Include the open note")
+      .setDesc(
+        "Attach the note you are viewing to chat messages when it is already shared with Claude through % or %%. Private notes are never attached on their own.",
+      )
+      .addToggle((toggle) =>
+        toggle.setValue(settings.includeOpenNote).onChange(async (value) => {
+          settings.includeOpenNote = value;
+          await this.plugin.saveSettings();
+          this.plugin.context.refresh();
+        }),
+      );
 
     new Setting(containerEl).setName("Test the connection").addButton((button) =>
       button.setButtonText("Test").onClick(async () => {

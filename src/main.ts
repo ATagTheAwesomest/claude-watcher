@@ -1,11 +1,23 @@
-import { Events, Notice, debounce, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import {
+  Events,
+  Notice,
+  Platform,
+  debounce,
+  Plugin,
+  TFile,
+  WorkspaceLeaf,
+  type Editor,
+} from "obsidian";
 
 import { WatcherClient } from "./api";
 import { APPROVALS_VIEW, ApprovalsView } from "./approvalsView";
+import { ChatContextModel, selectedLines, type LineSpan } from "./chatContext";
 import { CHAT_VIEW, ChatView } from "./chatView";
+import { ContextApprovals } from "./contextBar";
 import { EditReview } from "./edits";
 import { instructionHighlighter } from "./instructionHighlight";
 import { SYNTAX_EXAMPLES, findInstructions, hasInstructionMarker } from "./instructions";
+import { selectionButton } from "./selectionButton";
 import { DEFAULT_SETTINGS, WatcherSettingTab, type WatcherSettings } from "./settings";
 import type {
   ApprovalRequest,
@@ -24,6 +36,9 @@ export default class ClaudeWatcherPlugin extends Plugin {
   approvals: ApprovalRequest[] = [];
   /** Claude's edits waiting for the owner, as last fetched. */
   changes: PendingChange[] = [];
+  /** Notes and selections attached to the next chat message. */
+  readonly context = new ChatContextModel(() => this.settings.includeOpenNote);
+  readonly contextApprovals = new ContextApprovals(this);
   /** The instruction syntax the server reports, which wins over the plugin setting. */
   serverSyntax: InstructionSyntax | undefined;
   /** The models and effort levels the server offers. Older servers do not say. */
@@ -41,6 +56,8 @@ export default class ClaudeWatcherPlugin extends Plugin {
 
     this.registerEditorExtension(this.review.extension());
     this.registerEditorExtension(instructionHighlighter(this));
+    this.registerEditorExtension(selectionButton(this));
+    this.registerSelectionCommands();
     // Wait a moment after a note opens, so the editor holds its text.
     const showEdits = debounce(() => void this.review.showInEditors(), 300, true);
     this.registerEvent(this.events.on("changes", showEdits));
@@ -137,6 +154,8 @@ export default class ClaudeWatcherPlugin extends Plugin {
       for (const type of [CHAT_VIEW, APPROVALS_VIEW]) {
         for (const leaf of this.app.workspace.getLeavesOfType(type)) void leaf.loadIfDeferred?.();
       }
+      this.followOpenNote(this.app.workspace.getActiveFile());
+      this.registerEvent(this.app.workspace.on("file-open", (file) => this.followOpenNote(file)));
       this.startPolling();
       void this.refresh();
       void this.loadServerSettings();
@@ -210,6 +229,7 @@ export default class ClaudeWatcherPlugin extends Plugin {
       this.events.trigger("approvals");
       this.events.trigger("changes");
       this.announceNewApprovals();
+      void this.contextApprovals.check();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       // Repeating the same error every few seconds would only be noise.
@@ -245,6 +265,56 @@ export default class ClaudeWatcherPlugin extends Plugin {
     }
     const view = await this.showView(CHAT_VIEW);
     if (view instanceof ChatView) await view.startFromNote(file);
+  }
+
+  /**
+   * Adds a note, or some of its lines, to the next chat message. On a desktop
+   * the chat is shown too; on a phone the note stays in view, so several
+   * selections can be added before switching to the chat.
+   */
+  async addToChat(notePath: string, lines?: LineSpan): Promise<void> {
+    await this.contextApprovals.add(notePath, lines);
+    if (!Platform.isPhone) await this.showView(CHAT_VIEW);
+  }
+
+  /** Follows the lines selected in the note the owner is working in. */
+  followSelection(notePath: string, lines: LineSpan | undefined): void {
+    this.context.setOpenNote(notePath, lines);
+  }
+
+  private followOpenNote(file: TFile | null): void {
+    this.context.setOpenNote(file && file.extension === "md" ? file.path : undefined);
+  }
+
+  /** The command and note-menu entry that add the selection, for phones and keyboards. */
+  private registerSelectionCommands(): void {
+    this.addCommand({
+      id: "add-selection-to-chat",
+      name: "Add selection to chat",
+      icon: "text-select",
+      editorCheckCallback: (checking, editor, info) => {
+        const file = info.file;
+        if (!file || file.extension !== "md") return false;
+        const lines = editorLines(editor);
+        if (!checking) void this.addToChat(file.path, lines);
+        return true;
+      },
+    });
+    this.registerEvent(
+      this.app.workspace.on("editor-menu", (menu, editor, info) => {
+        const file = info.file;
+        const lines = editorLines(editor);
+        if (!file || file.extension !== "md" || !lines) return;
+        menu.addItem((item) =>
+          item
+            .setTitle(
+              `Add ${lines.start === lines.end ? `line ${lines.start}` : `lines ${lines.start}-${lines.end}`} to Claude chat`,
+            )
+            .setIcon("text-select")
+            .onClick(() => void this.addToChat(file.path, lines)),
+        );
+      }),
+    );
   }
 
   /** Opens the chat on an empty conversation, with a link to `about` when given. */
@@ -292,7 +362,10 @@ export default class ClaudeWatcherPlugin extends Plugin {
   }
 
   private announceNewApprovals(): void {
-    const fresh = this.approvals.filter((approval) => !this.seenApprovals.has(approval.id));
+    const fresh = this.approvals.filter(
+      // The owner's own selections are announced when they are added.
+      (approval) => !this.seenApprovals.has(approval.id) && approval.source !== "owner",
+    );
     this.seenApprovals = new Set(this.approvals.map((approval) => approval.id));
     if (fresh.length === 0) return;
     const notice = new Notice(
@@ -303,4 +376,12 @@ export default class ClaudeWatcherPlugin extends Plugin {
     );
     notice.noticeEl.addEventListener("click", () => void this.showView(APPROVALS_VIEW));
   }
+}
+
+/** The lines selected in an Obsidian editor, or undefined when nothing is. */
+function editorLines(editor: Editor): LineSpan | undefined {
+  if (!editor.somethingSelected()) return undefined;
+  const from = editor.getCursor("from");
+  const to = editor.getCursor("to");
+  return selectedLines(from.line + 1, to.line + 1, to.ch);
 }
