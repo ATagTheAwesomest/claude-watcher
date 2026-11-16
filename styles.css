@@ -221,6 +221,11 @@
   margin-bottom: var(--size-4-1);
 }
 
+.cw-chat-broken {
+  text-align: left;
+  color: var(--text-error);
+}
+
 .cw-chat-empty ul {
   padding-left: var(--size-4-4);
   margin-bottom: 0;
@@ -233,36 +238,7 @@
 }
 
 /* Sixteen pixels keeps iOS from zooming in when the box is tapped. */
-.is-mobile .cw-chat-toolbar,
-.cw-edits,
-.cw-status,
-.cw-composer {
-  flex-shrink: 0;
-}
-
-.cw-edits {
-  max-height: 30%;
-  overflow-y: auto;
-}
-
-.cw-chat-empty {
-  text-align: left;
-  color: var(--text-muted);
-}
-
-.cw-empty-title {
-  font-weight: var(--font-semibold);
-  color: var(--text-normal);
-  margin-bottom: var(--size-4-1);
-}
-
-.cw-chat-empty ul {
-  padding-left: var(--size-4-4);
-  margin-bottom: 0;
-}
-
-.cw-composer textarea {
-  box-sizing: border-box;
+.is-mobile .cw-composer textarea {
   font-size: 16px;
 }
 

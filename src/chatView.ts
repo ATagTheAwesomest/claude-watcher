@@ -61,6 +61,18 @@ export class ChatView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
+    try {
+      this.build();
+    } catch (error) {
+      // A panel that fails to build says why, instead of staying blank.
+      console.error("Claude Watcher: the chat panel failed to open", error);
+      showBroken(this.contentEl, error);
+      return;
+    }
+    await this.reload();
+  }
+
+  private build(): void {
     const root = this.contentEl;
     root.empty();
     root.addClass("cw-chat");
@@ -121,7 +133,6 @@ export class ChatView extends ItemView {
     const pending = this.pendingNewChat;
     this.pendingNewChat = undefined;
     if (pending) this.newChat(pending.about);
-    await this.reload();
   }
 
   async onClose(): Promise<void> {
@@ -180,8 +191,12 @@ export class ChatView extends ItemView {
     if (!(error instanceof WatcherError) || error.status !== 404) return false;
     this.sessions = this.sessions.filter((session) => session.id !== id);
     if (this.session?.id === id) this.session = undefined;
+    console.warn("Claude Watcher: the server has no chat", id, error.request);
     new Notice("That chat is no longer on the server. Starting a new chat.");
     this.newChat();
+    this.statusEl.setText(
+      `The server had no chat with id ${id} (${error.request ?? "unknown request"}).`,
+    );
     return true;
   }
 
@@ -192,7 +207,11 @@ export class ChatView extends ItemView {
       this.sessions.unshift(session);
     }
     this.renderPicker();
-    void this.renderMessages();
+    this.renderMessages().catch((error: unknown) => {
+      console.error("Claude Watcher: could not show the messages", error);
+      this.messagesEl.empty();
+      showBroken(this.messagesEl, error);
+    });
     this.renderEdits();
     const running = session?.status === "running";
     this.statusEl.setText(running ? "Claude is working…" : "");
@@ -359,9 +378,28 @@ export class ChatView extends ItemView {
     }
   }
 
+  /** Shows an error as a notice and keeps it under the messages until the next update. */
   private fail(error: unknown): void {
-    new Notice(error instanceof Error ? error.message : String(error));
+    const text = describeError(error);
+    console.error("Claude Watcher:", error);
+    new Notice(text);
+    this.statusEl?.setText(text);
   }
+}
+
+/** The error text, with the request it came from when there was one. */
+export function describeError(error: unknown): string {
+  if (error instanceof WatcherError && error.request) return `${error.message} (${error.request})`;
+  return error instanceof Error ? error.message : String(error);
+}
+
+function showBroken(el: HTMLElement, error: unknown): void {
+  const box = el.createDiv({ cls: "cw-empty cw-chat-broken" });
+  box.createDiv({ cls: "cw-empty-title", text: "The chat could not be shown" });
+  box.createDiv({ text: describeError(error) });
+  box.createDiv({
+    text: "Close this tab and open the chat again. If it keeps happening, report this message.",
+  });
 }
 
 /** What a new chat can do, shown until the first message is sent. */

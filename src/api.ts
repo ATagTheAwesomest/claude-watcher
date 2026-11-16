@@ -28,6 +28,8 @@ export class WatcherError extends Error {
     /** The server's error code, such as "note_changed". */
     readonly code: string,
     message: string,
+    /** The request that failed, such as "GET /sessions/abc". */
+    readonly request?: string,
   ) {
     super(message);
   }
@@ -117,7 +119,12 @@ export class WatcherClient {
       });
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      throw new WatcherError(0, "unreachable", `Could not reach the watcher server: ${reason}`);
+      throw new WatcherError(
+        0,
+        "unreachable",
+        `Could not reach the watcher server: ${reason}`,
+        `${method} ${path}`,
+      );
     }
     let json: unknown;
     try {
@@ -131,6 +138,7 @@ export class WatcherClient {
         response.status,
         error?.error ?? "http_error",
         error?.message ?? `The server answered ${response.status}`,
+        `${method} ${path}`,
       );
     }
     return json as T;
