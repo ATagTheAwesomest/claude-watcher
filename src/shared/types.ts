@@ -143,6 +143,37 @@ export interface ServerSettings {
     /** How the owner writes instructions in notes. */
     syntax: InstructionSyntax;
   };
+  /** The models and effort levels runs may use. Older servers leave it out. */
+  claude?: ClaudeOptions;
+}
+
+/**
+ * How hard Claude thinks before answering, as Claude Code's `--effort` flag
+ * takes it. Higher levels think longer and use more of the plan's usage.
+ */
+export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
+
+/** Every effort level, lowest first. */
+export const EFFORT_LEVELS: readonly EffortLevel[] = ["low", "medium", "high", "xhigh", "max"];
+
+/** A model the owner may pick for a run. */
+export interface ModelOption {
+  /** What is passed to Claude Code's `--model`, such as "opus" or a full model name. */
+  id: string;
+  /** A name to show. */
+  label: string;
+}
+
+/** The choices a run may use, and what is used when a request does not say. */
+export interface ClaudeOptions {
+  models: ModelOption[];
+  /** Model used when a request names neither a model nor a task size. */
+  defaultModel: string;
+  /** Model used for `task: "complex"`. */
+  complexModel: string;
+  efforts: EffortLevel[];
+  /** Effort used when a request does not say. Left out, Claude Code's own default applies. */
+  defaultEffort?: EffortLevel;
 }
 
 /**
@@ -156,7 +187,10 @@ export interface MoreRequestStatus {
   file?: string;
 }
 
-/** How demanding a task is. It decides which Claude model runs it. */
+/**
+ * How demanding a task is. It picks the default or the complex model when a
+ * request does not name a model.
+ */
 export type TaskSize = "simple" | "complex";
 
 /**
@@ -187,6 +221,9 @@ export interface ChatMessage {
   pointer?: InstructionPointer;
   /** Notes and selections the owner attached to the message. */
   context?: ChatContext[];
+  /** On an owner's message: the model and effort it was sent with. */
+  model?: string;
+  effort?: EffortLevel;
   /** True when the run failed and `text` says why. */
   error?: boolean;
   /** ISO 8601 time. */
@@ -198,6 +235,10 @@ export interface ChatSession {
   id: string;
   /** "running" while Claude is working on the latest message. */
   status: "running" | "idle";
+  /** Model of the latest run. Follow-ups that name no model or task keep it. */
+  model?: string;
+  /** Effort of the latest run, left out for Claude Code's default. Follow-ups that name none keep it. */
+  effort?: EffortLevel;
   /** The note the conversation started from, if any. */
   notePath?: string;
   messages: ChatMessage[];
@@ -219,7 +260,11 @@ export interface StartSessionBody {
   message?: string;
   /** Notes and selections attached to the message. */
   context?: ChatContext[];
-  /** Defaults to "simple". */
+  /** One of the server's models. Takes precedence over `task`. */
+  model?: string;
+  /** One of the server's effort levels, or "default" for the server's default. */
+  effort?: EffortLevel | "default";
+  /** Used only when no model is named. Defaults to "simple". */
   task?: TaskSize;
 }
 
@@ -228,7 +273,11 @@ export interface SessionMessageBody {
   message: string;
   /** Notes and selections attached to the message. */
   context?: ChatContext[];
-  /** Defaults to "simple". */
+  /** One of the server's models. Left out, with no task, the conversation's model is kept. */
+  model?: string;
+  /** One of the server's effort levels, or "default" for the server's default. Left out, the conversation's effort is kept. */
+  effort?: EffortLevel | "default";
+  /** Used only when no model is named. */
   task?: TaskSize;
 }
 

@@ -104,8 +104,12 @@ ignores the chips and cannot take private selections; the plugin says so.
   edit to jump to it in the note.
 - Keep writing to refine the result. Follow-up messages continue the same
   Claude session, so notes Claude has already read are not sent again.
-- Choose **Simple task** or **Complex task** per message. The server runs
-  simple tasks on a smaller model.
+- Pick the **model** and the **thinking effort** under the message box. The
+  list comes from the server (`WATCHER_CLAUDE_MODELS`), so it only offers
+  models your Claude plan can run. Higher effort means Claude thinks longer
+  and uses more of the plan's usage. Each chat remembers what it last ran
+  with. With a server too old to list its models, the box offers
+  **Simple task** or **Complex task** instead.
 
 ### Edits in the note
 
@@ -188,17 +192,18 @@ commit with the version in `manifest.json`.
 
 ## Settings
 
-| Setting            | Meaning                                                              |
-| ------------------ | -------------------------------------------------------------------- |
-| Server address     | Where the server is reachable, such as `https://watcher.example.com` |
-| API key            | The server's `WATCHER_API_KEY`                                       |
-| Check every        | Seconds between checks for new requests and edits                    |
-| Default task size  | Task size a new message starts with                                  |
-| Instruction syntax | `<c: ...>` (default, also accepts `[c: ...]`) or `[c: ...]` only     |
+| Setting                 | Meaning                                                              |
+| ----------------------- | -------------------------------------------------------------------- |
+| Server address          | Where the server is reachable, such as `https://watcher.example.com` |
+| API key                 | The server's `WATCHER_API_KEY`                                       |
+| Check every             | Seconds between checks for new requests and edits                    |
+| Default model           | Model a new chat starts with, or the server's default                |
+| Default thinking effort | Effort a new chat starts with, or the server's default               |
+| Instruction syntax      | `<c: ...>` (default, also accepts `[c: ...]`) or `[c: ...]` only     |
 
 When the server reports its own instruction syntax (`WATCHER_INSTRUCTION_SYNTAX`),
 the plugin follows it and the setting shows that it is following the server.
-The tab also shows the server's search mode and the most suggestions it offers
+The model and effort lists are read from the server. The tab also shows the server's search mode and the most suggestions it offers
 per request. Those are set on the server.
 
 The API key is stored in the plugin's `data.json` inside the vault's

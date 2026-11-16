@@ -2,7 +2,8 @@ import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 
 import type ClaudeWatcherPlugin from "./main";
 import { SYNTAX_EXAMPLES } from "./instructions";
-import type { InstructionSyntax, SearchMode, TaskSize } from "./shared/types";
+import { EFFORT_LABELS, defaultEffortLabel, modelLabel } from "./runChoice";
+import type { ClaudeOptions, EffortLevel, InstructionSyntax, SearchMode } from "./shared/types";
 
 export interface WatcherSettings {
   /** Address of the watcher server, such as https://watcher.example.com. */
@@ -11,8 +12,10 @@ export interface WatcherSettings {
   apiKey: string;
   /** How often to look for new approval requests and changes, in seconds. */
   pollSeconds: number;
-  /** Task size for new messages unless changed in the chat. */
-  defaultTask: TaskSize;
+  /** Model for new chats, or "" for the server's default. */
+  defaultModel: string;
+  /** Thinking effort for new chats, or "" for the server's default. */
+  defaultEffort: EffortLevel | "";
   /** How instructions are written in notes, unless the server reports its own. */
   instructionSyntax: InstructionSyntax;
   /** Show the "Lines 12-18 +" button under a selection in a note. */
@@ -25,7 +28,8 @@ export const DEFAULT_SETTINGS: WatcherSettings = {
   serverUrl: "http://localhost:9776",
   apiKey: "",
   pollSeconds: 10,
-  defaultTask: "simple",
+  defaultModel: "",
+  defaultEffort: "",
   instructionSyntax: "angle",
   selectionButton: true,
   includeOpenNote: true,
@@ -85,23 +89,16 @@ export class WatcherSettingTab extends PluginSettingTab {
           }),
       );
 
-    new Setting(containerEl)
-      .setName("Default task size")
-      .setDesc("Simple tasks run on the server's smaller model, complex tasks on the larger one.")
-      .addDropdown((dropdown) =>
-        dropdown
-          .addOptions({ simple: "Simple", complex: "Complex" })
-          .setValue(settings.defaultTask)
-          .onChange(async (value) => {
-            settings.defaultTask = value as TaskSize;
-            await this.plugin.saveSettings();
-          }),
-      );
+    const modelSetting = new Setting(containerEl).setName("Default model");
+    const effortSetting = new Setting(containerEl).setName("Default thinking effort");
+    this.renderChoiceDefaults(modelSetting, effortSetting);
 
     const syntaxSetting = new Setting(containerEl).setName("Instruction syntax");
     this.renderSyntax(syntaxSetting);
 
-    void this.showServerSettings(containerEl.createDiv(), syntaxSetting);
+    void this.showServerSettings(containerEl.createDiv(), syntaxSetting, () =>
+      this.renderChoiceDefaults(modelSetting, effortSetting),
+    );
 
     new Setting(containerEl)
       .setName("Selection button")
@@ -163,7 +160,55 @@ export class WatcherSettingTab extends PluginSettingTab {
     );
   }
 
-  private async showServerSettings(el: HTMLElement, syntaxSetting: Setting): Promise<void> {
+  /**
+   * Pickers for the model and effort new chats start with. The choices come
+   * from the server; each chat can change them.
+   */
+  private renderChoiceDefaults(modelSetting: Setting, effortSetting: Setting): void {
+    const { plugin } = this;
+    const options: ClaudeOptions | undefined = plugin.claudeOptions;
+    for (const setting of [modelSetting, effortSetting]) setting.controlEl.empty();
+    if (!options) {
+      modelSetting.setDesc(
+        "The models come from the server. Connect to a server that lists them to choose one.",
+      );
+      effortSetting.setDesc("How long Claude thinks before answering, once the server lists it.");
+      return;
+    }
+    modelSetting.setDesc("New chats start with this model. Each chat can pick another.");
+    effortSetting.setDesc(
+      "How long Claude thinks before answering. Higher levels use more of your plan's usage.",
+    );
+    const models: Record<string, string> = { "": "Server default" };
+    for (const model of options.models) models[model.id] = modelLabel(options, model.id);
+    const efforts: Record<string, string> = { "": defaultEffortLabel(options) };
+    for (const effort of options.efforts) efforts[effort] = EFFORT_LABELS[effort] ?? effort;
+    const settings = plugin.settings;
+    modelSetting.addDropdown((dropdown) =>
+      dropdown
+        .addOptions(models)
+        .setValue(settings.defaultModel in models ? settings.defaultModel : "")
+        .onChange(async (value) => {
+          settings.defaultModel = value;
+          await plugin.saveSettings();
+        }),
+    );
+    effortSetting.addDropdown((dropdown) =>
+      dropdown
+        .addOptions(efforts)
+        .setValue(settings.defaultEffort in efforts ? settings.defaultEffort : "")
+        .onChange(async (value) => {
+          settings.defaultEffort = value as EffortLevel | "";
+          await plugin.saveSettings();
+        }),
+    );
+  }
+
+  private async showServerSettings(
+    el: HTMLElement,
+    syntaxSetting: Setting,
+    renderChoice: () => void,
+  ): Promise<void> {
     new Setting(el).setName("Search on the server").setHeading();
     const info = el.createDiv({ cls: "setting-item-description" });
     if (!this.plugin.client.configured) {
@@ -180,6 +225,8 @@ export class WatcherSettingTab extends PluginSettingTab {
       const syntax = settings.instructions?.syntax;
       this.plugin.setServerSyntax(syntax === "angle" || syntax === "square" ? syntax : undefined);
       this.renderSyntax(syntaxSetting);
+      this.plugin.setClaudeOptions(settings.claude);
+      renderChoice();
       info.empty();
       const { mode, maxSuggestions } = settings.search;
       new Setting(el)
