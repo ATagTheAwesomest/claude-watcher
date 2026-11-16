@@ -101,18 +101,25 @@ export class Component {
 }
 
 export class ItemView extends Component {
-  contentEl = document.createElement("div");
+  containerEl = document.createElement("div");
+  contentEl = this.containerEl.appendChild(document.createElement("div"));
   app: App;
   constructor(public leaf: WorkspaceLeaf) {
     super();
     this.app = leaf.app;
   }
+  /** As in Obsidian: the leaf mounts a view by calling this, which then calls onOpen. */
+  async open(parentEl: HTMLElement): Promise<void> {
+    parentEl.appendChild(this.containerEl);
+    await (this as { onOpen?(): Promise<void> }).onOpen?.();
+  }
 }
 
-type View = { getViewType(): string; onOpen?(): Promise<void> };
+type View = { getViewType(): string; open(parentEl: HTMLElement): Promise<void> };
 
 export class WorkspaceLeaf {
   view: View | undefined;
+  containerEl = document.createElement("div");
   detached = false;
   constructor(
     public app: App,
@@ -124,7 +131,8 @@ export class WorkspaceLeaf {
   async setViewState({ type }: { type: string }) {
     const view = this.app.viewFactories.get(type)!(this);
     this.view = view;
-    await view.onOpen?.();
+    this.containerEl.empty();
+    await view.open(this.containerEl);
   }
   detach() {
     this.detached = true;

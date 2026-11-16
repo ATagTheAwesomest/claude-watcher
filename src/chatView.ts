@@ -87,7 +87,7 @@ export class ChatView extends ItemView {
 
     const toolbar = root.createDiv({ cls: "cw-chat-toolbar" });
     this.pickerEl = toolbar.createEl("select", { cls: "dropdown" });
-    this.pickerEl.addEventListener("change", () => void this.open(this.pickerEl.value));
+    this.pickerEl.addEventListener("change", () => void this.openChat(this.pickerEl.value));
     const newChat = toolbar.createEl("button", { cls: "cw-new-chat" });
     setIcon(newChat.createSpan(), "message-square-plus");
     newChat.createSpan({ text: "New chat" });
@@ -188,7 +188,12 @@ export class ChatView extends ItemView {
     this.show(current ?? (this.fresh ? undefined : this.sessions[0]));
   }
 
-  private async open(id: string): Promise<void> {
+  /**
+   * Shows a conversation picked from the list. Not named `open`: Obsidian
+   * mounts every view by calling its `open(containerEl)`, and a method of that
+   * name here would replace it, leaving the panel blank.
+   */
+  private async openChat(id: string): Promise<void> {
     if (id === NEW_CHAT || id === "") return this.newChat();
     try {
       this.show(await this.plugin.client.session(id));

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CHAT_VIEW, ChatView, EMPTY_STATE, NEW_CHAT, describeError } from "../src/chatView";
 import { WatcherError } from "../src/api";
+import { ApprovalsView } from "../src/approvalsView";
 import ClaudeWatcherPlugin from "../src/main";
 import type { ChatSession } from "../src/shared/types";
 // The same module the plugin gets for "obsidian" (see vitest.config.mjs).
@@ -284,6 +285,32 @@ describe("a new chat on a phone", () => {
       expect(chat().contentEl.querySelector(".cw-chat-empty")).not.toBeNull();
     } finally {
       Platform.isMobile = false;
+    }
+  });
+});
+
+describe("mounting the panel", () => {
+  beforeEach(load);
+
+  it("builds the chat inside its leaf and never asks the server for a non-id chat", async () => {
+    await command("open-chat").callback!();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const leaf = chatLeaves()[0]!;
+    expect(leaf.containerEl.querySelector(".cw-chat-toolbar")).not.toBeNull();
+    expect(leaf.containerEl.querySelector("textarea")).not.toBeNull();
+    for (const [id] of client.session!.mock.calls) expect(typeof id).toBe("string");
+  });
+
+  it("keeps the names Obsidian uses to mount and close views", () => {
+    // A view method with one of these names replaces Obsidian's own, and the
+    // panel is never attached to its leaf.
+    for (const view of [ChatView, ApprovalsView]) {
+      for (const name of ["open", "close", "load", "unload", "setState", "getState"]) {
+        expect(
+          Object.prototype.hasOwnProperty.call(view.prototype, name),
+          `${view.name}.${name}`,
+        ).toBe(false);
+      }
     }
   });
 });
