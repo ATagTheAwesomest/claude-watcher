@@ -126,16 +126,16 @@ describe("starting a new chat", () => {
     expect(chatLeaves()[0]!.getRoot()).toBe(app.workspace.rightSplit);
   });
 
-  it("opens as a full tab on a phone and replaces a chat left in the drawer", async () => {
-    command("open-chat").callback!();
-    await settle();
-    expect(chatLeaves()[0]!.getRoot()).toBe(app.workspace.rightSplit);
-
+  it("opens in the drawer on a phone and closes a chat tab left in the main area", async () => {
     Platform.isPhone = true;
+    const tab = app.workspace.getLeaf();
+    await tab.setViewState({ type: CHAT_VIEW });
+    expect(chatLeaves()[0]!.getRoot()).toBe(app.workspace.rootSplit);
+
     command("new-chat").callback!();
     await settle();
     expect(chatLeaves()).toHaveLength(1);
-    expect(chatLeaves()[0]!.getRoot()).toBe(app.workspace.rootSplit);
+    expect(chatLeaves()[0]!.getRoot()).toBe(app.workspace.rightSplit);
 
     command("new-chat").callback!();
     await settle();
