@@ -11,7 +11,8 @@ function createEl(this: HTMLElement, tag: string, o: Attrs = {}): HTMLElement {
   if (o.cls) el.className = o.cls;
   if (o.text !== undefined) el.textContent = o.text;
   for (const [k, v] of Object.entries(o.attr ?? {})) el.setAttribute(k, v);
-  if (o.value !== undefined) (el as HTMLInputElement).value = o.value;
+  // An empty value is left unset, as Obsidian may do, so an option falls back to its text.
+  if (o.value) (el as HTMLInputElement).value = o.value;
   this.appendChild(el);
   return el;
 }

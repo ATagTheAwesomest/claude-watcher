@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CHAT_VIEW, ChatView, EMPTY_STATE } from "../src/chatView";
+import { CHAT_VIEW, ChatView, EMPTY_STATE, NEW_CHAT } from "../src/chatView";
+import { WatcherError } from "../src/api";
 import ClaudeWatcherPlugin from "../src/main";
 import type { ChatSession } from "../src/shared/types";
 // The same module the plugin gets for "obsidian" (see vitest.config.mjs).
@@ -96,7 +97,7 @@ describe("starting a new chat", () => {
     expect(root.querySelector(".cw-chat-empty")?.textContent).toContain(EMPTY_STATE.intro);
     expect(root.querySelector(".cw-new-chat")?.textContent).toBe("New chat");
     expect(document.activeElement).toBe(input());
-    expect(root.querySelector<HTMLSelectElement>(".cw-chat-toolbar select")!.value).toBe("");
+    expect(root.querySelector<HTMLSelectElement>(".cw-chat-toolbar select")!.value).toBe(NEW_CHAT);
   });
 
   it("stays on the new chat when the list of chats reloads", async () => {
@@ -176,5 +177,64 @@ describe("a new chat about a note", () => {
     items[0]!.click!();
     await settle();
     expect(input().value).toBe("[[Projects/Garden plan.md]] ");
+  });
+});
+
+describe("a chat the server no longer has", () => {
+  const gone = () => new WatcherError(404, "not_found", "No such conversation");
+
+  function picker(): HTMLSelectElement {
+    return chat().contentEl.querySelector<HTMLSelectElement>(".cw-chat-toolbar select")!;
+  }
+
+  it("picking New chat in the list opens a new chat without asking the server", async () => {
+    command("open-chat").callback!();
+    await settle();
+    expect(chat().contentEl.querySelector(".cw-chat-empty")).toBeNull();
+    picker().value = NEW_CHAT;
+    expect(picker().value).toBe(NEW_CHAT);
+    picker().dispatchEvent(new Event("change"));
+    await settle();
+    expect(client.session).not.toHaveBeenCalled();
+    expect(chat().contentEl.querySelector(".cw-chat-empty")).not.toBeNull();
+  });
+
+  it("is dropped from the list and replaced by a new chat when picked", async () => {
+    command("open-chat").callback!();
+    await settle();
+    client.session!.mockRejectedValueOnce(gone());
+    picker().value = "s1";
+    picker().dispatchEvent(new Event("change"));
+    await settle();
+    expect(chat().contentEl.querySelector(".cw-chat-empty")).not.toBeNull();
+    expect([...picker().options].map((o) => o.value)).toEqual([NEW_CHAT]);
+  });
+
+  it("turns a follow-up message into a new chat", async () => {
+    command("open-chat").callback!();
+    await settle();
+    client.sendMessage!.mockRejectedValueOnce(gone());
+    input().value = "One more thing";
+    chat().contentEl.querySelector<HTMLButtonElement>(".mod-cta")!.click();
+    await settle();
+    expect(client.sendMessage).toHaveBeenCalledWith("s1", {
+      message: "One more thing",
+      task: "simple",
+    });
+    expect(client.startSession).toHaveBeenCalledWith({ message: "One more thing", task: "simple" });
+    expect(picker().value).toBe("s2");
+    expect(input().value).toBe("");
+  });
+});
+
+describe("a new chat asked for before the panel is built", () => {
+  it("opens once the panel is built", async () => {
+    const leaf = app.workspace.getLeaf();
+    const view = new ChatView(leaf as never, plugin);
+    view.newChat(app.vault.files[0] as never);
+    leaf.view = view as never;
+    await view.onOpen();
+    expect(view.contentEl.querySelector("textarea")!.value).toBe("[[Projects/Garden plan.md]] ");
+    expect(view.contentEl.querySelector(".cw-chat-empty")).not.toBeNull();
   });
 });
