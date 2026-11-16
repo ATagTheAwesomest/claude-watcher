@@ -306,3 +306,112 @@
   background-color: rgba(var(--color-purple-rgb), 0.12);
   border-radius: 3px;
 }
+
+/* Context chips: notes and selections attached to the next message */
+
+.cw-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-1);
+  margin-bottom: var(--size-4-2);
+}
+
+.cw-context.is-empty {
+  display: none;
+}
+
+.cw-message-context {
+  margin: var(--size-4-1) 0 0;
+}
+
+.cw-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--size-2-2);
+  max-width: 100%;
+  padding: 1px var(--size-2-2) 1px var(--size-4-1);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.6;
+}
+
+.cw-chip.is-open-note {
+  border-style: dashed;
+}
+
+.cw-chip.is-private {
+  border-color: rgba(var(--color-orange-rgb), 0.6);
+}
+
+.cw-chip.is-approved {
+  border-color: rgba(var(--color-green-rgb), 0.6);
+}
+
+.cw-chip-icon {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+.cw-chip-icon svg,
+.cw-chip-remove svg {
+  width: 12px;
+  height: 12px;
+}
+
+.cw-chip-label {
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cw-chip-note {
+  color: var(--text-warning);
+}
+
+button.cw-chip-remove {
+  padding: 0 2px;
+  height: auto;
+  min-height: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+
+/* The button under a selection in a note */
+
+.cw-selection-button {
+  margin-top: var(--size-4-1);
+  background: none;
+  border: none;
+}
+
+.cw-selection-button button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--size-4-1);
+  height: auto;
+  padding: var(--size-2-1) var(--size-4-2);
+  border-radius: var(--radius-m);
+  font-size: var(--font-ui-smaller);
+  background: var(--interactive-normal);
+  box-shadow: var(--shadow-s);
+}
+
+.cw-selection-plus {
+  display: inline-flex;
+  padding-left: var(--size-4-1);
+  border-left: 1px solid var(--background-modifier-border);
+}
+
+.cw-selection-plus svg {
+  width: 14px;
+  height: 14px;
+}
+
+.is-mobile .cw-selection-button button {
+  padding: var(--size-4-1) var(--size-4-3);
+  font-size: var(--font-ui-small);
+}

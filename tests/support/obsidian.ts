@@ -95,6 +95,7 @@ export const MarkdownRenderer = {
 export class MarkdownView {}
 
 export class Component {
+  register() {}
   registerEvent() {}
   registerInterval() {}
   registerDomEvent() {}
@@ -176,6 +177,9 @@ export class App {
   workspace: Workspace = new Workspace(this);
   vault = {
     files: [] as TFile[],
+    on() {
+      return {};
+    },
     getMarkdownFiles() {
       return this.files;
     },

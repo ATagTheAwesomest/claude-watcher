@@ -63,6 +63,36 @@ The **Claude chat** panel works like a chat panel in a code editor.
   more and you approve an excerpt on an approval card.
 - Links to notes in Claude's replies open the note when tapped.
 
+### Adding notes and selections to a message
+
+Like the chat in a code editor, a message can carry notes and lines of notes
+as context. They show as chips above the message box; tap a chip to jump to
+its lines and its **x** to take it off.
+
+- **The open note.** When the note you are viewing is shared with Claude, by
+  `%` or `%%` on its title or on a folder above it, it is attached on its own.
+  Select some of it and the chip narrows to those lines. Remove it with its
+  **x**; it stays off until you open another note. Private notes are never
+  attached on their own. Turn this off with **Include the open note** in the
+  settings.
+- **A selection.** Select text in a note and a small **Lines 12-18 +** button
+  appears under it. Click or tap it to add those lines. The same is in the
+  note's menu (right click, or the editor menu on a phone) as **Add lines ...
+  to Claude chat**, and as the command **Add selection to chat**, which can go
+  in the mobile toolbar. Without a selection the command adds the whole note.
+  On a desktop the chat opens beside the note; on a phone the note stays in
+  view so you can add more before switching to the chat. Hide the button with
+  **Selection button** in the settings.
+
+Only paths and line numbers go to the server. A selection from a private note
+first becomes an approval card, the same as when Claude asks for more, where
+you can trim it before approving. A message that carries one waits until the
+card is settled: once approved, it goes with the excerpt; if rejected, it goes
+without it. Removing the chip withdraws the request.
+
+This needs a watcher server that accepts message context. An older server
+ignores the chips and cannot take private selections; the plugin says so.
+
 - In a note whose title ends with `%%`, write instructions as `<c: ...>`, such
   as `<c: summarise this into three bullet points>`. They may span several
   lines. The older `[c: ...]` form still works. Instructions are tinted in the
@@ -184,6 +214,7 @@ example through a Cloudflare Tunnel.
 | New chat about this note                | Opens an empty chat that links the note    |
 | Open chat                               | Opens the chat panel on the latest chat    |
 | Send this note's instructions to Claude | Starts a chat from the current `%%` note   |
+| Add selection to chat                   | Attaches the selected lines, or the note   |
 | Check for requests now                  | Asks the server for new requests and edits |
 
 ## Development
@@ -223,6 +254,10 @@ src/
 ├── rangePicker.ts     text with a draggable green selection
 ├── suggestions.ts     grouping and ranking of suggestions
 ├── chatView.ts        chat sidebar
+├── chatContext.ts     notes and selections attached to a message
+├── contextBar.ts      context chips and approval of private selections
+├── selectionButton.ts the "Lines 12-18 +" button under a selection
+├── access.ts          which notes Claude can already read
 ├── noteLinks.ts       linking notes in chat messages
 ├── edits.ts           pending edits in the editor, accept and reject
 ├── instructions.ts    finding <c: ...> instructions in a note

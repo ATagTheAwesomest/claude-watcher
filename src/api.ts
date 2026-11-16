@@ -14,6 +14,7 @@ import type {
   ApproveBody,
   ChatSession,
   ChatSessionList,
+  OwnerApprovalBody,
   PendingChangeList,
   ServerSettings,
   SessionMessageBody,
@@ -66,6 +67,17 @@ export class WatcherClient {
   async pendingApprovals(): Promise<ApprovalRequest[]> {
     const list = await this.call<ApprovalList>("GET", "/approvals?status=pending");
     return list.approvals;
+  }
+
+  /** Every request the server keeps, settled ones included. */
+  async approvals(): Promise<ApprovalRequest[]> {
+    const list = await this.call<ApprovalList>("GET", "/approvals");
+    return list.approvals;
+  }
+
+  /** Asks for approval of a private selection the owner added to the chat. */
+  shareSelection(body: OwnerApprovalBody): Promise<ApprovalRequest> {
+    return this.call("POST", "/approvals", body);
   }
 
   approve(id: string, body: ApproveBody): Promise<ApprovalRequest> {

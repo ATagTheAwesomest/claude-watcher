@@ -16,6 +16,7 @@ import {
 } from "obsidian";
 
 import { WatcherError } from "./api";
+import { chipsOf, renderChips } from "./contextBar";
 import type ClaudeWatcherPlugin from "./main";
 import { NotePicker, linkFor, linkTarget, resolveLinks } from "./noteLinks";
 import type { ChatMessage, ChatSession, PendingChange, TaskSize } from "./shared/types";
@@ -41,6 +42,7 @@ export class ChatView extends ItemView {
   private inputEl!: HTMLTextAreaElement;
   private taskEl!: HTMLSelectElement;
   private sendEl!: HTMLButtonElement;
+  private chipsEl!: HTMLElement;
   private runTimer: number | undefined;
   /** True while the owner is on a new, unsent chat, so a reload keeps it. */
   private fresh = false;
@@ -102,6 +104,12 @@ export class ChatView extends ItemView {
     this.statusEl = root.createDiv({ cls: "cw-status" });
 
     const composer = root.createDiv({ cls: "cw-composer" });
+    this.chipsEl = composer.createDiv({ cls: "cw-context" });
+    this.renderContext();
+    const stopFollowing = this.plugin.context.onChange(() => this.renderContext());
+    this.register(stopFollowing);
+    // A message held for approvals goes once they are settled.
+    this.registerEvent(this.plugin.events.on("context-ready", () => void this.send()));
     this.inputEl = composer.createEl("textarea", {
       attr: { placeholder: "Ask Claude about your notes. Type [[ to link one.", rows: "3" },
     });
@@ -287,21 +295,53 @@ export class ChatView extends ItemView {
   private async send(): Promise<void> {
     const message = resolveLinks(this.app, this.inputEl.value.trim());
     if (message === "" || this.sendEl.disabled) return;
+    // Private selections wait for approval; the message is sent once they are settled.
+    this.sendEl.disabled = true;
+    const context = await this.plugin.contextApprovals.prepare().catch((error: unknown) => {
+      this.fail(error);
+      return null;
+    });
+    this.sendEl.disabled = this.session?.status === "running";
+    if (context === null) return;
+    if (context === undefined) {
+      this.statusEl.setText("Waiting for you to approve the private selection before sending…");
+      return;
+    }
+    const attached = context.length > 0 ? context : undefined;
     const task = this.task();
     const session = this.session;
     const ok = await this.run(async () => {
-      if (!session) return this.plugin.client.startSession({ message, task });
+      if (!session) return this.plugin.client.startSession({ message, context: attached, task });
       try {
-        return await this.plugin.client.sendMessage(session.id, { message, task });
+        return await this.plugin.client.sendMessage(session.id, {
+          message,
+          context: attached,
+          task,
+        });
       } catch (error) {
         // The chat is gone from the server: the message starts a new one instead.
         if (!(error instanceof WatcherError) || error.status !== 404) throw error;
         this.sessions = this.sessions.filter((s) => s.id !== session.id);
         new Notice("That chat is no longer on the server. Your message starts a new chat.");
-        return this.plugin.client.startSession({ message, task });
+        return this.plugin.client.startSession({ message, context: attached, task });
       }
     });
-    if (ok) this.inputEl.value = "";
+    if (ok) {
+      this.inputEl.value = "";
+      this.plugin.context.clearAdded();
+    }
+  }
+
+  /** The chips of the message being written. */
+  private renderContext(): void {
+    renderChips(this.chipsEl, this.plugin.context.chips(), {
+      remove: (chip) => void this.plugin.contextApprovals.remove(chip),
+      open: (chip) => void this.openChip(chip.notePath, chip.lines),
+    });
+  }
+
+  private async openChip(notePath: string, lines?: { start: number; end: number }) {
+    await this.plugin.openNote(notePath, lines);
   }
 
   private async run(request: () => Promise<ChatSession>): Promise<boolean> {
@@ -349,6 +389,15 @@ export class ChatView extends ItemView {
       if (message.text !== "") {
         const sourcePath = this.session.notePath ?? "";
         await MarkdownRenderer.render(this.app, message.text, body.createDiv(), sourcePath, this);
+      }
+      if (message.context?.length) {
+        renderChips(
+          body.createDiv({ cls: "cw-context cw-message-context" }),
+          chipsOf(message.context),
+          {
+            open: (chip) => void this.openChip(chip.notePath, chip.lines),
+          },
+        );
       }
     }
     el.scrollTop = el.scrollHeight;

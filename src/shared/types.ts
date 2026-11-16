@@ -7,11 +7,11 @@
 
 /** How much of a vault note Claude is allowed to see. */
 export type NoteAccess =
-  /** No marker in the title. Claude only sees excerpts the owner approves. */
+  /** No marker on the title or a folder above. Claude only sees excerpts the owner approves. */
   | "private"
-  /** One percent sign in the title. Claude may read the whole note. */
+  /** One percent sign on the title or nearest marked folder. Claude may read the whole note. */
   | "readable"
-  /** Two percent signs in the title. Readable, and its "<c: ...>" parts are instructions. */
+  /** Two percent signs on the title or nearest marked folder. Readable, and its "<c: ...>" parts are instructions. */
   | "instructions";
 
 /** A range of whole lines. Line numbers start at 1 and both ends are included. */
@@ -78,6 +78,22 @@ export interface ApprovalRequest {
   rank?: number;
   /** Shared by every suggestion that came from the same request by Claude. */
   batchId?: string;
+  /**
+   * Who asked: Claude through the request tool (the default), or the owner,
+   * who added a selection of a private note to a chat message.
+   */
+  source?: "claude" | "owner";
+}
+
+/**
+ * Body of `POST /approvals`: the owner adds a selection of a private note to
+ * the chat. It becomes a pending request like Claude's, and nothing reaches
+ * the mirror until the owner approves it.
+ */
+export interface OwnerApprovalBody {
+  /** Note path relative to the vault root, using forward slashes. */
+  notePath: string;
+  range: NoteRange;
 }
 
 /** Response of `GET /approvals`. */
@@ -143,6 +159,22 @@ export interface MoreRequestStatus {
 /** How demanding a task is. It decides which Claude model runs it. */
 export type TaskSize = "simple" | "complex";
 
+/**
+ * A note, or some of its lines, that the owner attached to a chat message. It
+ * holds a path and line numbers, never text: Claude reads a shared note in the
+ * mirror, and sees a private one only through an approved excerpt.
+ */
+export interface ChatContext {
+  /** Note path relative to the vault root, using forward slashes. */
+  notePath: string;
+  /** First line of the selection. Leave both lines out for the whole note. */
+  startLine?: number;
+  /** Last line of the selection, included. */
+  endLine?: number;
+  /** For a private note: the approval request that released the selection. */
+  approvalId?: string;
+}
+
 /** One message in a sidebar conversation. */
 export interface ChatMessage {
   role: "owner" | "claude";
@@ -153,6 +185,8 @@ export interface ChatMessage {
    * The plugin reads their text from the vault.
    */
   pointer?: InstructionPointer;
+  /** Notes and selections the owner attached to the message. */
+  context?: ChatContext[];
   /** True when the run failed and `text` says why. */
   error?: boolean;
   /** ISO 8601 time. */
@@ -183,6 +217,8 @@ export interface ChatSessionList {
 export interface StartSessionBody {
   notePath?: string;
   message?: string;
+  /** Notes and selections attached to the message. */
+  context?: ChatContext[];
   /** Defaults to "simple". */
   task?: TaskSize;
 }
@@ -190,6 +226,8 @@ export interface StartSessionBody {
 /** Body of `POST /sessions/:id/messages`. */
 export interface SessionMessageBody {
   message: string;
+  /** Notes and selections attached to the message. */
+  context?: ChatContext[];
   /** Defaults to "simple". */
   task?: TaskSize;
 }

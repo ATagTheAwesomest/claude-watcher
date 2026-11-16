@@ -71,7 +71,14 @@ export class ApprovalsView extends ItemView {
     const groups = batches.map((batch) => {
       const group = createDiv({ cls: "cw-batch" });
       const header = group.createDiv({ cls: "cw-batch-header" });
-      header.createDiv({ cls: "cw-query", text: `Claude is looking for: ${batch[0]!.query}` });
+      const first = batch[0]!;
+      header.createDiv({
+        cls: "cw-query",
+        text:
+          first.source === "owner"
+            ? "You added this selection to the chat. Approve it to let Claude read it."
+            : `Claude is looking for: ${first.query}`,
+      });
       const row = header.createDiv({ cls: "cw-buttons" });
       row.createSpan({
         cls: "cw-range",
