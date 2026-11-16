@@ -1,9 +1,9 @@
 import {
   Events,
+  MarkdownView,
   Notice,
   Platform,
   debounce,
-  MarkdownView,
   Plugin,
   TFile,
   WorkspaceLeaf,
@@ -318,6 +318,29 @@ export default class ClaudeWatcherPlugin extends Plugin {
     });
   }
 
+  /**
+   * "Ask Claude about this excerpt": shares exactly the selected text for
+   * this chat, with no approval card, since choosing it is the approval. The
+   * chat opens with the excerpt attached, ready for a question.
+   */
+  async askAboutSelection(editor: Editor, file: TFile): Promise<void> {
+    const lines = editorLines(editor);
+    if (!lines) {
+      new Notice("Select some text first.");
+      return;
+    }
+    // Saved first, so the server's copy can match the text on screen.
+    await this.app.workspace.getActiveViewOfType(MarkdownView)?.save();
+    const text = editor.getValue();
+    const chars = {
+      start: editor.posToOffset(editor.getCursor("from")),
+      end: editor.posToOffset(editor.getCursor("to")),
+    };
+    if (!(await this.contextApprovals.ask(file, text, lines, chars))) return;
+    const view = await this.showView(CHAT_VIEW);
+    if (view instanceof ChatView) view.readyForQuestion();
+  }
+
   /** Follows the lines selected in the note the owner is working in. */
   followSelection(notePath: string, lines: LineSpan | undefined): void {
     this.context.setOpenNote(notePath, lines);
@@ -327,8 +350,19 @@ export default class ClaudeWatcherPlugin extends Plugin {
     this.context.setOpenNote(file && file.extension === "md" ? file.path : undefined);
   }
 
-  /** The command and note-menu entry that add the selection, for phones and keyboards. */
+  /** The commands and note-menu entries that add the selection, for phones and keyboards. */
   private registerSelectionCommands(): void {
+    this.addCommand({
+      id: "ask-about-selection",
+      name: "Ask Claude about this excerpt",
+      icon: "message-circle-question",
+      editorCheckCallback: (checking, editor, info) => {
+        const file = info.file;
+        if (!file || file.extension !== "md" || !editor.somethingSelected()) return false;
+        if (!checking) void this.askAboutSelection(editor, file);
+        return true;
+      },
+    });
     this.addCommand({
       id: "add-selection-to-chat",
       name: "Add selection to chat",
@@ -346,6 +380,12 @@ export default class ClaudeWatcherPlugin extends Plugin {
         const file = info.file;
         const lines = editorLines(editor);
         if (!file || file.extension !== "md" || !lines) return;
+        menu.addItem((item) =>
+          item
+            .setTitle("Ask Claude about this excerpt")
+            .setIcon("message-circle-question")
+            .onClick(() => void this.askAboutSelection(editor, file)),
+        );
         menu.addItem((item) =>
           item
             .setTitle(

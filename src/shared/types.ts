@@ -56,7 +56,7 @@ export interface InstructionPointer {
 }
 
 /** Where an approval request stands. */
-export type ApprovalStatus = "pending" | "approved" | "rejected";
+export type ApprovalStatus = "pending" | "approved" | "rejected" | "withdrawn";
 
 /**
  * A request to show Claude part of a private note, as the plugin sees it.
@@ -83,6 +83,34 @@ export interface ApprovalRequest {
    * who added a selection of a private note to a chat message.
    */
   source?: "claude" | "owner";
+  /**
+   * Set on an excerpt the owner shared for one chat by choosing "Ask Claude
+   * about this excerpt". It is approved from the start, and is "withdrawn"
+   * once the owner removes it or it expires.
+   */
+  excerpt?: SessionExcerpt;
+}
+
+/** How long an excerpt shared for one chat lasts, and which chat it belongs to. */
+export interface SessionExcerpt {
+  /** The chat it was sent with. Left out until it is first sent. */
+  sessionId?: string;
+  /** ISO 8601 time it expires unless the chat is used again. */
+  expiresAt: string;
+  /** SHA-256 (hex) of the note text the range was chosen in. */
+  noteHash: string;
+}
+
+/**
+ * Body of `POST /excerpts`. The owner chose this exact range in the note, so
+ * it is released at once without an approval card, for one chat only.
+ */
+export interface SessionExcerptBody {
+  /** Note path relative to the vault root, using forward slashes. */
+  notePath: string;
+  range: NoteRange;
+  /** SHA-256 (hex) of the note's UTF-8 text as the owner saw it. */
+  noteHash: string;
 }
 
 /**
@@ -207,6 +235,11 @@ export interface ChatContext {
   endLine?: number;
   /** For a private note: the approval request that released the selection. */
   approvalId?: string;
+  /**
+   * Filled in by the server for an excerpt shared for one chat: "active"
+   * while Claude may read it, "ended" once withdrawn or expired.
+   */
+  excerpt?: "active" | "ended";
 }
 
 /** One message in a sidebar conversation. */

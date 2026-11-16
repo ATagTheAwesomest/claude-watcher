@@ -1,6 +1,6 @@
 {
   "name": "claude-watcher",
-  "version": "0.2.1",
+  "version": "0.3.1",
   "description": "Obsidian plugin for the Claude Watcher server: approval cards, a chat sidebar and inline edit review.",
   "private": true,
   "type": "module",

@@ -17,6 +17,7 @@ import type {
   OwnerApprovalBody,
   PendingChangeList,
   ServerSettings,
+  SessionExcerptBody,
   SessionMessageBody,
   StartSessionBody,
 } from "./shared/types";
@@ -78,6 +79,16 @@ export class WatcherClient {
   /** Asks for approval of a private selection the owner added to the chat. */
   shareSelection(body: OwnerApprovalBody): Promise<ApprovalRequest> {
     return this.call("POST", "/approvals", body);
+  }
+
+  /** Shares a selection for one chat. Choosing it is the owner's approval, so no card is shown. */
+  shareExcerpt(body: SessionExcerptBody): Promise<ApprovalRequest> {
+    return this.call("POST", "/excerpts", body);
+  }
+
+  /** Takes an excerpt shared for a chat back out of the mirror. */
+  withdrawExcerpt(id: string): Promise<ApprovalRequest> {
+    return this.call("POST", `/excerpts/${encodeURIComponent(id)}/withdraw`, {});
   }
 
   approve(id: string, body: ApproveBody): Promise<ApprovalRequest> {

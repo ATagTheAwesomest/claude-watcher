@@ -478,6 +478,19 @@ button.cw-change-reset:hover {
   border-color: rgba(var(--color-green-rgb), 0.6);
 }
 
+.cw-chip.is-ended {
+  border-style: dotted;
+  color: var(--text-faint);
+}
+
+.cw-chip.is-ended .cw-chip-label {
+  text-decoration: line-through;
+}
+
+.cw-chip.is-ended .cw-chip-note {
+  color: var(--text-faint);
+}
+
 .cw-chip-icon {
   display: inline-flex;
   color: var(--text-muted);
