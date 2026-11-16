@@ -1,6 +1,6 @@
 /**
- * The chat sidebar. Start a chat by typing a message, or from a note's
- * "<c: ...>" instructions. Messages can link notes with [[...]]. Claude's
+ * The chat panel. Start a chat at any time by typing a message, with or
+ * without a note, or from a note's "<c: ...>" instructions. Messages can link notes with [[...]]. Claude's
  * replies and proposed edits appear below, and follow-up messages continue
  * the same Claude Code session on the server.
  */
@@ -27,6 +27,8 @@ export class ChatView extends ItemView {
   private taskEl!: HTMLSelectElement;
   private sendEl!: HTMLButtonElement;
   private runTimer: number | undefined;
+  /** True while the owner is on a new, unsent chat, so a reload keeps it. */
+  private fresh = false;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -55,9 +57,10 @@ export class ChatView extends ItemView {
     const toolbar = root.createDiv({ cls: "cw-chat-toolbar" });
     this.pickerEl = toolbar.createEl("select", { cls: "dropdown" });
     this.pickerEl.addEventListener("change", () => void this.open(this.pickerEl.value));
-    const newChat = toolbar.createEl("button", { attr: { "aria-label": "New chat" } });
-    setIcon(newChat, "plus");
-    newChat.addEventListener("click", () => this.show(undefined));
+    const newChat = toolbar.createEl("button", { cls: "cw-new-chat" });
+    setIcon(newChat.createSpan(), "message-square-plus");
+    newChat.createSpan({ text: "New chat" });
+    newChat.addEventListener("click", () => this.newChat());
     const reload = toolbar.createEl("button", { attr: { "aria-label": "Reload" } });
     setIcon(reload, "refresh-cw");
     reload.addEventListener("click", () => void this.reload());
@@ -69,7 +72,7 @@ export class ChatView extends ItemView {
 
     const composer = root.createDiv({ cls: "cw-composer" });
     this.inputEl = composer.createEl("textarea", {
-      attr: { placeholder: "Message Claude. Type [[ to link a note.", rows: "3" },
+      attr: { placeholder: "Ask Claude about your notes. Type [[ to link one.", rows: "3" },
     });
     this.inputEl.addEventListener("input", () => {
       const before = this.inputEl.value.slice(0, this.inputEl.selectionStart);
@@ -110,6 +113,17 @@ export class ChatView extends ItemView {
     window.clearTimeout(this.runTimer);
   }
 
+  /**
+   * Shows an empty chat with the message box focused. With `about`, the box
+   * starts with a link to that note.
+   */
+  newChat(about?: TFile): void {
+    if (this.session) this.inputEl.value = "";
+    this.show(undefined);
+    if (about) this.insert(`${linkFor(about)} `);
+    else this.inputEl.focus();
+  }
+
   /** Starts a conversation from the instructions of a note. */
   async startFromNote(file: TFile): Promise<void> {
     await this.run(() =>
@@ -127,7 +141,7 @@ export class ChatView extends ItemView {
     }
     this.sessions.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     const current = this.session && this.sessions.find((s) => s.id === this.session!.id);
-    this.show(current ?? this.sessions[0]);
+    this.show(current ?? (this.fresh ? undefined : this.sessions[0]));
   }
 
   private async open(id: string): Promise<void> {
@@ -141,6 +155,7 @@ export class ChatView extends ItemView {
 
   private show(session: ChatSession | undefined): void {
     this.session = session;
+    this.fresh = session === undefined;
     if (session && !this.sessions.some((s) => s.id === session.id)) {
       this.sessions.unshift(session);
     }
@@ -239,10 +254,7 @@ export class ChatView extends ItemView {
     const el = this.messagesEl;
     el.empty();
     if (!this.session) {
-      el.createDiv({
-        cls: "cw-empty",
-        text: "Write a message below to start a chat. Link notes with [[...]]; Claude only sees a linked note's path until you approve more. You can also run “Send this note's instructions to Claude” on a %% note.",
-      });
+      renderEmptyState(el);
       return;
     }
     for (const message of this.session.messages) {
@@ -309,6 +321,26 @@ export class ChatView extends ItemView {
   private fail(error: unknown): void {
     new Notice(error instanceof Error ? error.message : String(error));
   }
+}
+
+/** What a new chat can do, shown until the first message is sent. */
+export const EMPTY_STATE = {
+  title: "New chat",
+  intro: "Ask Claude anything about your notes. No note or instruction is needed.",
+  tips: [
+    "Type [[ or use the link buttons to point Claude at a note. Only its path is sent.",
+    "When Claude needs text from a note, an approval card asks you first.",
+    "Notes marked % or %% in the title are shared with Claude already.",
+    "Follow-up messages continue the same chat. Pick an earlier chat from the list above.",
+  ],
+};
+
+function renderEmptyState(el: HTMLElement): void {
+  const box = el.createDiv({ cls: "cw-empty cw-chat-empty" });
+  box.createDiv({ cls: "cw-empty-title", text: EMPTY_STATE.title });
+  box.createDiv({ text: EMPTY_STATE.intro });
+  const list = box.createEl("ul");
+  for (const tip of EMPTY_STATE.tips) list.createEl("li", { text: tip });
 }
 
 function label(session: ChatSession): string {

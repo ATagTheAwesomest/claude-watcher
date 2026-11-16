@@ -36,12 +36,27 @@ With every approval the plugin sends a SHA-256 hash of the text it showed you.
 If the server's copy of the note differs, for example because sync has not
 caught up, the approval is refused and nothing is released.
 
+### Start a chat
+
+A chat needs no note and no instructions. Open a new one from anywhere:
+
+- the **New Claude chat** ribbon icon (in the menu on a phone),
+- the command **New chat**, or **New chat about this note** to start with a link
+  to the open note,
+- **New Claude chat about this note** in a note's menu (the **...** menu on a
+  phone, right click on a desktop),
+- the **New chat** button at the top of the chat panel.
+
+The chat opens with the message box ready. On a phone it opens as a full tab.
+To reach it in one tap on iOS or Android, add **New chat** to the mobile
+toolbar under **Settings → Mobile**.
+
 ### Chat sidebar
 
 The **Claude chat** panel works like a chat panel in a code editor.
 
-- Type a message at the bottom to start a chat at any time. Use **+** for a new
-  chat and the list at the top to go back to an earlier one.
+- Type a message at the bottom to start a chat at any time. Use **New chat** for
+  a new one and the list at the top to go back to an earlier one.
 - Link notes in a message by typing `[[`, with the link button, or with the
   button that links the current note. Only the note's path is sent. Claude sees
   a linked note only if its title is marked `%` or `%%`, or when it asks for
@@ -165,7 +180,9 @@ example through a Cloudflare Tunnel.
 | Command                                 | What it does                               |
 | --------------------------------------- | ------------------------------------------ |
 | Open approvals                          | Opens the approval panel                   |
-| Open chat                               | Opens the chat panel                       |
+| New chat                                | Opens an empty chat                        |
+| New chat about this note                | Opens an empty chat that links the note    |
+| Open chat                               | Opens the chat panel on the latest chat    |
 | Send this note's instructions to Claude | Starts a chat from the current `%%` note   |
 | Check for requests now                  | Asks the server for new requests and edits |
 
@@ -176,7 +193,7 @@ Requires Node.js 22 or newer.
 ```sh
 npm install
 npm run dev          # rebuild main.js on every change
-npm test             # unit tests
+npm test             # unit and view tests
 npm run lint
 npm run build        # type check and production build
 ```
@@ -212,4 +229,6 @@ src/
 ├── instructionHighlight.ts  tinting instructions in the editor
 ├── text.ts            ranges, hashes and applying changes
 └── shared/types.ts    API types copied from the server
+tests/
+└── support/obsidian.ts  stand-in for the Obsidian API used by view tests
 ```

@@ -22,6 +22,7 @@
     "esbuild": "^0.28.2",
     "eslint": "^10.15.0",
     "globals": "^17.14.0",
+    "jsdom": "^26.1.0",
     "obsidian": "^1.14.4",
     "prettier": "^3.10.1",
     "typescript": "^6.0.3",
