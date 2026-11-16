@@ -7,7 +7,7 @@
  * shared note's chip follows the selection.
  */
 
-import { StateField, type EditorState } from "@codemirror/state";
+import { StateEffect, StateField, type EditorState } from "@codemirror/state";
 import {
   EditorView,
   ViewPlugin,
@@ -34,25 +34,42 @@ function notePath(state: EditorState): string | undefined {
   return file && file.extension === "md" ? file.path : undefined;
 }
 
+/** Tells an editor to check again whether the button should show. */
+export const refreshSelectionButton = StateEffect.define<null>();
+
+/** Space between the end of the selected line and the button, in pixels. */
+const GAP = 12;
+/** About how wide the button is, to tell whether it fits beside the line. */
+const BUTTON_WIDTH = 120;
+
 export function selectionButton(plugin: ClaudeWatcherPlugin) {
   const tooltip = (state: EditorState): Tooltip | null => {
-    if (!plugin.settings.selectionButton) return null;
+    // The button adds to the chat, so it shows only while the chat is open.
+    if (!plugin.settings.selectionButton || !plugin.chatIsOpen()) return null;
     const lines = selectionLines(state);
     const path = notePath(state);
     if (!lines || !path) return null;
+    const lineEnd = state.doc.line(lines.end).to;
     return {
-      pos: state.selection.main.to,
+      pos: lineEnd,
       above: false,
       strictSide: false,
       arrow: false,
-      create: () => ({ dom: buttonFor(plugin, path, lines) }),
+      create: (view) => ({
+        dom: buttonFor(plugin, path, lines),
+        getCoords: () => beside(view, lineEnd),
+      }),
     };
   };
 
   const field = StateField.define<Tooltip | null>({
     create: tooltip,
     update: (value, transaction) =>
-      transaction.selection || transaction.docChanged ? tooltip(transaction.state) : value,
+      transaction.selection ||
+      transaction.docChanged ||
+      transaction.effects.some((effect) => effect.is(refreshSelectionButton))
+        ? tooltip(transaction.state)
+        : value,
     provide: (f) => showTooltip.from(f),
   });
 
@@ -76,6 +93,22 @@ export function selectionButton(plugin: ClaudeWatcherPlugin) {
   };
 
   return [field, follow];
+}
+
+/**
+ * Where the button goes: just right of the last selected line, on that line,
+ * so it covers no text. A line that runs to the edge puts it below instead.
+ */
+function beside(view: EditorView, lineEnd: number): DOMRect {
+  const end = view.coordsAtPos(lineEnd, -1) ?? view.coordsAtPos(lineEnd, 1);
+  if (!end) return new DOMRect(0, 0, 0, 0);
+  const right = view.contentDOM.getBoundingClientRect().right;
+  const left = end.right + GAP;
+  if (left + BUTTON_WIDTH <= right) {
+    // A tooltip below its position starts at the bottom of this box: the line's top.
+    return new DOMRect(left, end.top, 0, 0);
+  }
+  return new DOMRect(end.left, end.bottom + 4, 0, 0);
 }
 
 function buttonFor(plugin: ClaudeWatcherPlugin, notePath: string, lines: LineSpan): HTMLElement {

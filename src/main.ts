@@ -3,11 +3,14 @@ import {
   Notice,
   Platform,
   debounce,
+  MarkdownView,
   Plugin,
   TFile,
   WorkspaceLeaf,
   type Editor,
 } from "obsidian";
+
+import type { EditorView } from "@codemirror/view";
 
 import { WatcherClient } from "./api";
 import { APPROVALS_VIEW, ApprovalsView } from "./approvalsView";
@@ -17,7 +20,7 @@ import { ContextApprovals } from "./contextBar";
 import { EditReview } from "./edits";
 import { instructionHighlighter } from "./instructionHighlight";
 import { SYNTAX_EXAMPLES, findInstructions, hasInstructionMarker } from "./instructions";
-import { selectionButton } from "./selectionButton";
+import { refreshSelectionButton, selectionButton } from "./selectionButton";
 import { DEFAULT_SETTINGS, WatcherSettingTab, type WatcherSettings } from "./settings";
 import type {
   ApprovalRequest,
@@ -45,6 +48,7 @@ export default class ClaudeWatcherPlugin extends Plugin {
   claudeOptions: ClaudeOptions | undefined;
 
   private pollTimer: number | undefined;
+  private chatWasOpen: boolean | undefined;
   private seenApprovals = new Set<string>();
   private lastError = "";
 
@@ -63,6 +67,11 @@ export default class ClaudeWatcherPlugin extends Plugin {
     this.registerEvent(this.events.on("changes", showEdits));
     this.registerEvent(this.app.workspace.on("layout-change", showEdits));
     this.registerEvent(this.app.workspace.on("file-open", showEdits));
+    // The selection button shows only while the chat is open beside the note.
+    const updateButtons = () => this.updateSelectionButtons();
+    this.registerEvent(this.app.workspace.on("layout-change", updateButtons));
+    this.registerEvent(this.app.workspace.on("active-leaf-change", updateButtons));
+    this.registerEvent(this.app.workspace.on("resize", updateButtons));
 
     this.addRibbonIcon("shield-check", "Claude approvals", () => this.showView(APPROVALS_VIEW));
     this.addCommand({
@@ -221,10 +230,12 @@ export default class ClaudeWatcherPlugin extends Plugin {
       return;
     }
     try {
-      [this.approvals, this.changes] = await Promise.all([
+      let changes: PendingChange[];
+      [this.approvals, changes] = await Promise.all([
         this.client.pendingApprovals(),
         this.client.pendingChanges(),
       ]);
+      this.changes = this.review.withoutAccepted(changes);
       this.lastError = "";
       this.events.trigger("approvals");
       this.events.trigger("changes");
@@ -270,11 +281,41 @@ export default class ClaudeWatcherPlugin extends Plugin {
   /**
    * Adds a note, or some of its lines, to the next chat message. On a desktop
    * the chat is shown too; on a phone the note stays in view, so several
-   * selections can be added before switching to the chat.
+   * selections can be added before switching to the chat. If the chat is not
+   * open yet, it is opened first, so the chip lands somewhere visible.
    */
   async addToChat(notePath: string, lines?: LineSpan): Promise<void> {
+    const wasOpen = this.chatIsOpen();
     await this.contextApprovals.add(notePath, lines);
-    if (!Platform.isPhone) await this.showView(CHAT_VIEW);
+    if (!wasOpen || !Platform.isPhone) await this.showView(CHAT_VIEW);
+  }
+
+  /**
+   * Whether the chat panel is open: its tab is the one showing in its
+   * sidebar, and on a desktop or tablet that sidebar is expanded. A phone's
+   * drawer closes while a note is edited, so there the chat only has to be
+   * the drawer's current tab.
+   */
+  chatIsOpen(): boolean {
+    const { workspace } = this.app;
+    return workspace.getLeavesOfType(CHAT_VIEW).some((leaf) => {
+      const root = leaf.getRoot();
+      const split = root === workspace.rightSplit ? workspace.rightSplit : workspace.leftSplit;
+      if (!Platform.isPhone && root !== workspace.rootSplit && split.collapsed) return false;
+      return isCurrentTab(leaf);
+    });
+  }
+
+  /** Shows or hides the selection button in every open note. */
+  private updateSelectionButtons(): void {
+    const open = this.chatIsOpen();
+    if (open === this.chatWasOpen) return;
+    this.chatWasOpen = open;
+    this.app.workspace.iterateAllLeaves((leaf) => {
+      if (!(leaf.view instanceof MarkdownView)) return;
+      const editor = (leaf.view.editor as unknown as { cm?: EditorView }).cm;
+      editor?.dispatch({ effects: refreshSelectionButton.of(null) });
+    });
   }
 
   /** Follows the lines selected in the note the owner is working in. */
@@ -376,6 +417,16 @@ export default class ClaudeWatcherPlugin extends Plugin {
     );
     notice.noticeEl.addEventListener("click", () => void this.showView(APPROVALS_VIEW));
   }
+}
+
+/** Whether a leaf is the tab showing in its tab group. */
+function isCurrentTab(leaf: WorkspaceLeaf): boolean {
+  const group = (leaf as unknown as { parent?: { children?: unknown[]; currentTab?: number } })
+    .parent;
+  if (group?.children && typeof group.currentTab === "number") {
+    return group.children[group.currentTab] === leaf;
+  }
+  return true;
 }
 
 /** The lines selected in an Obsidian editor, or undefined when nothing is. */
