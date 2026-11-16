@@ -47,7 +47,7 @@ A chat needs no note and no instructions. Open a new one from anywhere:
   phone, right click on a desktop),
 - the **New chat** button at the top of the chat panel.
 
-The chat opens with the message box ready. On a phone it opens as a full tab.
+The chat opens with the message box ready. On a phone it opens in the right drawer.
 To reach it in one tap on iOS or Android, add **New chat** to the mobile
 toolbar under **Settings → Mobile**.
 

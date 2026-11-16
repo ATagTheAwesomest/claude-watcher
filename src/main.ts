@@ -1,4 +1,4 @@
-import { Events, Notice, Platform, debounce, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { Events, Notice, debounce, Plugin, TFile, WorkspaceLeaf } from "obsidian";
 
 import { WatcherClient } from "./api";
 import { APPROVALS_VIEW, ApprovalsView } from "./approvalsView";
@@ -245,22 +245,17 @@ export default class ClaudeWatcherPlugin extends Plugin {
   }
 
   /**
-   * The leaf that shows a view. On a phone the chat opens as a full-screen tab,
-   * where the message box has room next to the keyboard; elsewhere views open
-   * in the right sidebar.
+   * The leaf that shows a view: the right sidebar, which is the drawer on a
+   * phone. A chat tab in the main area, left by an earlier version, is closed,
+   * because on iOS it showed only a black screen.
    */
   private async leafFor(type: string): Promise<WorkspaceLeaf | null> {
     const { workspace } = this.app;
-    const leaves = workspace.getLeavesOfType(type);
-    if (type === CHAT_VIEW && Platform.isPhone) {
-      const inMain = leaves.find((leaf) => leaf.getRoot() === workspace.rootSplit);
-      if (inMain) return inMain;
-      // A chat left in the sidebar drawer by an earlier version is moved to a tab.
-      for (const leaf of leaves) leaf.detach();
-      const leaf = workspace.getLeaf("tab");
-      await leaf.setViewState({ type, active: true });
-      return leaf;
-    }
+    const leaves = workspace.getLeavesOfType(type).filter((leaf) => {
+      if (leaf.getRoot() !== workspace.rootSplit) return true;
+      leaf.detach();
+      return false;
+    });
     if (leaves[0]) return leaves[0];
     const leaf = workspace.getRightLeaf(false);
     await leaf?.setViewState({ type, active: true });
