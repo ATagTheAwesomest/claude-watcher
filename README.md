@@ -75,13 +75,15 @@ its lines and its **x** to take it off.
   **x**; it stays off until you open another note. Private notes are never
   attached on their own. Turn this off with **Include the open note** in the
   settings.
-- **A selection.** Select text in a note and a small **Lines 12-18 +** button
-  appears under it. Click or tap it to add those lines. The same is in the
+- **A selection.** While the chat is open, select text in a note and a small
+  **Lines 12-18 +** button appears beside the last selected line. Click or tap
+  it to add those lines. The same is in the
   note's menu (right click, or the editor menu on a phone) as **Add lines ...
   to Claude chat**, and as the command **Add selection to chat**, which can go
   in the mobile toolbar. Without a selection the command adds the whole note.
-  On a desktop the chat opens beside the note; on a phone the note stays in
-  view so you can add more before switching to the chat. Hide the button with
+  Both open the chat if it is closed. On a desktop the chat opens beside the
+  note; on a phone, once the chat is open, the note stays in view so you can
+  add more before switching to the chat. Hide the button with
   **Selection button** in the settings.
 
 Only paths and line numbers go to the server. A selection from a private note
@@ -138,15 +140,24 @@ an older one is reported in a notice.
 
 ### Edits in the note
 
-Claude's edits are shown in the note itself: lines it replaces are marked red,
-and the new lines appear in green below them with **Accept** and **Reject**
-buttons.
+Claude's edits are shown in the note itself, like an inline diff: lines it
+replaces are tinted red and struck through, and its proposed text appears in a
+green box below them with **Accept** and **Reject** buttons.
 
+- The green box is editable. Fix anything Claude got wrong before accepting;
+  **Accept** writes your version. **Undo my edits** brings back Claude's text,
+  and emptying the box makes the change remove the red lines only.
+  Ctrl+Enter (Cmd+Enter on a Mac) accepts from the box.
+- The red lines cannot be edited while the change is pending, so a stray
+  keystroke cannot throw the change away. Edit the green box, or reject the
+  change, instead.
+- You can keep editing the rest of the note; pending changes stay in place.
 - Edits close together form one change; edits far apart, such as the top and
   bottom of a note, are separate changes.
 - **Accept** writes the change into the note. This is the only way an edit of
-  Claude's reaches the vault. It is applied only if the note still matches the
-  text Claude edited.
+  Claude's reaches the vault. With the note open it is applied in the editor;
+  from the chat with the note closed, only if the note still matches the text
+  Claude edited.
 - **Reject** takes the edit back out of Claude's mirror copy.
 
 ## Installing

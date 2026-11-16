@@ -144,7 +144,8 @@ export class WorkspaceLeaf {
 
 class Workspace extends Events {
   rootSplit = { name: "main" };
-  rightSplit = { name: "right" };
+  rightSplit = { name: "right", collapsed: false };
+  leftSplit = { name: "left", collapsed: false };
   leaves: WorkspaceLeaf[] = [];
   activeFile: TFile | null = null;
   constructor(private app: App) {
@@ -173,6 +174,9 @@ class Workspace extends Events {
     return this.add(this.rootSplit);
   }
   async revealLeaf() {}
+  iterateAllLeaves(fn: (leaf: WorkspaceLeaf) => void) {
+    this.leaves.forEach(fn);
+  }
   onLayoutReady() {}
   updateOptions() {}
 }
