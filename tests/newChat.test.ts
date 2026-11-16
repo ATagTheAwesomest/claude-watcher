@@ -270,3 +270,20 @@ describe("errors in the chat panel", () => {
     expect(broken?.textContent).toContain("boom");
   });
 });
+
+describe("a new chat on a phone", () => {
+  it("does not focus the message box, which scrolls iOS out of view", async () => {
+    Platform.isMobile = true;
+    Platform.isPhone = true;
+    try {
+      command("new-chat").callback!();
+      await settle();
+      document.body.appendChild(chat().contentEl);
+      chat().newChat();
+      expect(document.activeElement).not.toBe(input());
+      expect(chat().contentEl.querySelector(".cw-chat-empty")).not.toBeNull();
+    } finally {
+      Platform.isMobile = false;
+    }
+  });
+});
