@@ -7,6 +7,7 @@
 
 import { ItemView, MarkdownRenderer, Notice, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 
+import { WatcherError } from "./api";
 import type ClaudeWatcherPlugin from "./main";
 import { NotePicker, linkFor, linkTarget, resolveLinks } from "./noteLinks";
 import type { ChatMessage, ChatSession, PendingChange, TaskSize } from "./shared/types";
@@ -15,6 +16,12 @@ export const CHAT_VIEW = "claude-watcher-chat";
 
 /** How often a running conversation is checked, in milliseconds. */
 const RUN_POLL_MS = 2000;
+
+/**
+ * The picker entry for a new chat. Not empty: an option with an empty value
+ * falls back to its text ("New chat"), which would be sent as a conversation id.
+ */
+export const NEW_CHAT = "new";
 
 export class ChatView extends ItemView {
   private session: ChatSession | undefined;
@@ -29,6 +36,10 @@ export class ChatView extends ItemView {
   private runTimer: number | undefined;
   /** True while the owner is on a new, unsent chat, so a reload keeps it. */
   private fresh = false;
+  /** Set once onOpen has built the panel. */
+  private built = false;
+  /** A new chat asked for before the panel was built, opened once it is. */
+  private pendingNewChat: { about?: TFile } | undefined;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -106,6 +117,10 @@ export class ChatView extends ItemView {
     this.sendEl.addEventListener("click", () => void this.send());
 
     this.registerEvent(this.plugin.events.on("changes", () => this.renderEdits()));
+    this.built = true;
+    const pending = this.pendingNewChat;
+    this.pendingNewChat = undefined;
+    if (pending) this.newChat(pending.about);
     await this.reload();
   }
 
@@ -118,6 +133,10 @@ export class ChatView extends ItemView {
    * starts with a link to that note.
    */
   newChat(about?: TFile): void {
+    if (!this.built) {
+      this.pendingNewChat = { about };
+      return;
+    }
     if (this.session) this.inputEl.value = "";
     this.show(undefined);
     if (about) this.insert(`${linkFor(about)} `);
@@ -145,12 +164,25 @@ export class ChatView extends ItemView {
   }
 
   private async open(id: string): Promise<void> {
-    if (id === "") return this.show(undefined);
+    if (id === NEW_CHAT || id === "") return this.newChat();
     try {
       this.show(await this.plugin.client.session(id));
     } catch (error) {
-      this.fail(error);
+      if (!this.forgetIfGone(error, id)) this.fail(error);
     }
+  }
+
+  /**
+   * When the server no longer has a conversation (it was cleared or the server
+   * started over), drops it and shows a new chat instead. Returns true if so.
+   */
+  private forgetIfGone(error: unknown, id: string): boolean {
+    if (!(error instanceof WatcherError) || error.status !== 404) return false;
+    this.sessions = this.sessions.filter((session) => session.id !== id);
+    if (this.session?.id === id) this.session = undefined;
+    new Notice("That chat is no longer on the server. Starting a new chat.");
+    this.newChat();
+    return true;
   }
 
   private show(session: ChatSession | undefined): void {
@@ -179,6 +211,7 @@ export class ChatView extends ItemView {
       this.show(session);
       if (session.status === "idle") await this.plugin.refresh();
     } catch (error) {
+      if (this.forgetIfGone(error, this.session.id)) return;
       this.fail(error);
       this.runTimer = window.setTimeout(() => void this.poll(), RUN_POLL_MS * 3);
     }
@@ -217,11 +250,18 @@ export class ChatView extends ItemView {
     if (message === "" || this.sendEl.disabled) return;
     const task = this.task();
     const session = this.session;
-    const ok = await this.run(() =>
-      session
-        ? this.plugin.client.sendMessage(session.id, { message, task })
-        : this.plugin.client.startSession({ message, task }),
-    );
+    const ok = await this.run(async () => {
+      if (!session) return this.plugin.client.startSession({ message, task });
+      try {
+        return await this.plugin.client.sendMessage(session.id, { message, task });
+      } catch (error) {
+        // The chat is gone from the server: the message starts a new one instead.
+        if (!(error instanceof WatcherError) || error.status !== 404) throw error;
+        this.sessions = this.sessions.filter((s) => s.id !== session.id);
+        new Notice("That chat is no longer on the server. Your message starts a new chat.");
+        return this.plugin.client.startSession({ message, task });
+      }
+    });
     if (ok) this.inputEl.value = "";
   }
 
@@ -243,11 +283,12 @@ export class ChatView extends ItemView {
 
   private renderPicker(): void {
     this.pickerEl.empty();
-    this.pickerEl.createEl("option", { value: "", text: "New chat" });
+    // Values are set as properties, so no option ever falls back to its text.
+    this.pickerEl.createEl("option", { text: "New chat" }).value = NEW_CHAT;
     for (const session of this.sessions) {
-      this.pickerEl.createEl("option", { value: session.id, text: label(session) });
+      this.pickerEl.createEl("option", { text: label(session) }).value = session.id;
     }
-    this.pickerEl.value = this.session?.id ?? "";
+    this.pickerEl.value = this.session?.id ?? NEW_CHAT;
   }
 
   private async renderMessages(): Promise<void> {
