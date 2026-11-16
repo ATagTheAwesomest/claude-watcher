@@ -17,8 +17,11 @@ export interface LineSpan {
   end: number;
 }
 
-/** Where a private selection stands on its way to Claude. */
-export type ChipState = "new" | "waiting" | "approved";
+/**
+ * Where a private selection stands on its way to Claude. "ended" is an
+ * excerpt shared for one chat that was removed or expired.
+ */
+export type ChipState = "new" | "waiting" | "approved" | "ended";
 
 export interface ContextChip {
   /** Stable key: "open" for the open note, otherwise the note path and lines. */
@@ -33,6 +36,11 @@ export interface ContextChip {
   /** For a private selection: the approval request made for it. */
   approvalId?: string;
   state?: ChipState;
+  /**
+   * Shared for one chat with "Ask Claude about this excerpt": approved by
+   * choosing it, and withdrawn when the chip is removed.
+   */
+  excerpt?: boolean;
 }
 
 /** The id of the chip that follows the open note. */
@@ -71,6 +79,11 @@ export function chipTitle(chip: ContextChip): string {
       ? `${where} (the open note, shared with Claude)`
       : `${where} (shared with Claude)`;
   }
+  if (chip.excerpt) {
+    return chip.state === "ended"
+      ? `${where} (excerpt no longer shared with Claude)`
+      : `${where} (excerpt shared for this chat; remove it to take it back)`;
+  }
   if (chip.state === "approved") return `${where} (approved excerpt)`;
   return `${where} (private: Claude sees it only after you approve it)`;
 }
@@ -81,6 +94,11 @@ function spanText(lines: LineSpan): string {
 
 function chipId(notePath: string, lines?: LineSpan): string {
   return lines ? `${notePath}#${lines.start}-${lines.end}` : notePath;
+}
+
+/** A private note's excerpt is told apart from an approval-card chip for the same lines. */
+function excerptId(notePath: string, lines: LineSpan): string {
+  return `${chipId(notePath, lines)}:excerpt`;
 }
 
 /** The chips of the message being written, and the open note they start with. */
@@ -134,6 +152,37 @@ export class ChatContextModel {
     this.added.push(chip);
     this.changed();
     return chip;
+  }
+
+  /**
+   * Adds an excerpt of a private note that the server already released for
+   * this chat. Returns undefined if the same lines are already there this way.
+   */
+  addExcerpt(notePath: string, lines: LineSpan, approvalId: string): ContextChip | undefined {
+    const id = excerptId(notePath, lines);
+    if (this.added.some((chip) => chip.id === id)) return undefined;
+    const chip: ContextChip = {
+      id,
+      notePath,
+      lines,
+      private: true,
+      approvalId,
+      state: "approved",
+      excerpt: true,
+    };
+    this.added.push(chip);
+    this.changed();
+    return chip;
+  }
+
+  /** True when an excerpt of these lines is already attached. */
+  hasExcerpt(notePath: string, lines: LineSpan): boolean {
+    return this.added.some((chip) => chip.id === excerptId(notePath, lines));
+  }
+
+  /** True when the message being written carries an excerpt shared for the chat. */
+  hasExcerpts(): boolean {
+    return this.added.some((chip) => chip.excerpt);
   }
 
   get(id: string): ContextChip | undefined {
