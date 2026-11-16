@@ -306,3 +306,18 @@
   background-color: rgba(var(--color-purple-rgb), 0.12);
   border-radius: 3px;
 }
+
+/* Model and effort pickers */
+
+.cw-run-choice {
+  justify-content: flex-start;
+}
+
+.cw-run-choice select {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.cw-hidden {
+  display: none !important;
+}

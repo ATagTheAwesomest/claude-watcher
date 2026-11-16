@@ -314,3 +314,99 @@ describe("mounting the panel", () => {
     }
   });
 });
+
+describe("picking the model and thinking effort", () => {
+  const offered = {
+    models: [
+      { id: "opus", label: "Opus" },
+      { id: "sonnet", label: "Sonnet" },
+      { id: "haiku", label: "Haiku" },
+    ],
+    defaultModel: "sonnet",
+    complexModel: "opus",
+    efforts: ["low", "medium", "high", "xhigh", "max"],
+  } as NonNullable<typeof plugin.claudeOptions>;
+
+  const model = () => chat().contentEl.querySelector<HTMLSelectElement>("select.cw-model")!;
+  const effort = () => chat().contentEl.querySelector<HTMLSelectElement>("select.cw-effort")!;
+  const task = () => chat().contentEl.querySelector<HTMLSelectElement>("select.cw-task")!;
+  const pick = (select: HTMLSelectElement, value: string) => {
+    select.value = value;
+    select.dispatchEvent(new Event("change"));
+  };
+  const send = async (text: string) => {
+    input().value = text;
+    chat().contentEl.querySelector<HTMLButtonElement>(".mod-cta")!.click();
+    await settle();
+  };
+
+  it("shows the task size alone for a server that lists no models", async () => {
+    command("new-chat").callback!();
+    await settle();
+    expect(task().classList.contains("cw-hidden")).toBe(false);
+    expect(model().classList.contains("cw-hidden")).toBe(true);
+    pick(task(), "complex");
+    await send("Hi");
+    expect(client.startSession).toHaveBeenCalledWith({ message: "Hi", task: "complex" });
+  });
+
+  it("offers the server's models and effort levels, starting from the defaults", async () => {
+    plugin.settings.defaultEffort = "high";
+    plugin.setClaudeOptions(offered);
+    command("new-chat").callback!();
+    await settle();
+    expect(task().classList.contains("cw-hidden")).toBe(true);
+    expect([...model().options].map((o) => o.text)).toEqual(["Opus", "Sonnet (default)", "Haiku"]);
+    expect([...effort().options].map((o) => o.value)).toEqual([
+      "default",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]);
+    expect(model().value).toBe("sonnet");
+    expect(effort().value).toBe("high");
+
+    pick(model(), "opus");
+    pick(effort(), "max");
+    await send("Plan the garden");
+    expect(client.startSession).toHaveBeenCalledWith({
+      message: "Plan the garden",
+      model: "opus",
+      effort: "max",
+    });
+  });
+
+  it("shows each chat's own choice and keeps an unsent pick when switching chats", async () => {
+    const ranOnHaiku = { ...earlier, model: "haiku", effort: "low" } as ChatSession;
+    client.sessions!.mockImplementation(async () => [ranOnHaiku]);
+    client.session!.mockImplementation(async () => ranOnHaiku);
+    client.sendMessage!.mockImplementation(async () => ranOnHaiku);
+    plugin.setClaudeOptions(offered);
+    command("open-chat").callback!();
+    await settle();
+    expect(model().value).toBe("haiku");
+    expect(effort().value).toBe("low");
+
+    chat().newChat();
+    expect(model().value).toBe("sonnet");
+    pick(model(), "opus");
+
+    const picker = chat().contentEl.querySelector<HTMLSelectElement>(".cw-chat-toolbar select")!;
+    picker.value = "s1";
+    picker.dispatchEvent(new Event("change"));
+    await settle();
+    expect(model().value).toBe("haiku");
+    pick(effort(), "xhigh");
+    await send("Again");
+    expect(client.sendMessage).toHaveBeenCalledWith("s1", {
+      message: "Again",
+      model: "haiku",
+      effort: "xhigh",
+    });
+
+    chat().newChat();
+    expect(model().value).toBe("opus");
+  });
+});
