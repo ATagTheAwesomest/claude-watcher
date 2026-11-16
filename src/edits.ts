@@ -28,6 +28,8 @@ import { applyChange, hashNote } from "./text";
 
 /** Wait this long after accepting before asking the server again, in milliseconds. */
 const SETTLE_DELAY_MS = 1500;
+/** Quiet time before a blocked keystroke shows its notice again, in milliseconds. */
+const BLOCKED_NOTICE_MS = 4000;
 
 export class EditReview {
   /** The owner's edits to Claude's proposed text, by change id. */
@@ -36,9 +38,15 @@ export class EditReview {
   private readonly accepted = new Set<string>();
   private readonly hooks: ChangeHooks = {
     widget: (change) => new ChangeWidget(change, this),
-    blocked: () =>
-      new Notice("Edit Claude's proposed text in the green box, or reject the change first."),
+    blocked: () => {
+      // One notice per burst of keystrokes is enough.
+      if (Date.now() - this.lastBlocked > BLOCKED_NOTICE_MS) {
+        new Notice("Edit Claude's proposed text in the green box, or reject the change first.");
+      }
+      this.lastBlocked = Date.now();
+    },
   };
+  private lastBlocked = 0;
 
   constructor(private readonly plugin: ClaudeWatcherPlugin) {}
 
