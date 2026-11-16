@@ -5,7 +5,15 @@
  * the same Claude Code session on the server.
  */
 
-import { ItemView, MarkdownRenderer, Notice, TFile, WorkspaceLeaf, setIcon } from "obsidian";
+import {
+  ItemView,
+  MarkdownRenderer,
+  Notice,
+  Platform,
+  TFile,
+  WorkspaceLeaf,
+  setIcon,
+} from "obsidian";
 
 import { WatcherError } from "./api";
 import type ClaudeWatcherPlugin from "./main";
@@ -150,8 +158,14 @@ export class ChatView extends ItemView {
     }
     if (this.session) this.inputEl.value = "";
     this.show(undefined);
-    if (about) this.insert(`${linkFor(about)} `);
-    else this.inputEl.focus();
+    if (about) this.insert(`${linkFor(about)} `, false);
+    // On iOS, focusing the box while the panel opens scrolls the whole app out
+    // of view and leaves a black screen. On mobile the owner taps the box instead.
+    if (!Platform.isMobile) this.focusInput();
+  }
+
+  private focusInput(): void {
+    this.inputEl.focus({ preventScroll: true });
   }
 
   /** Starts a conversation from the instructions of a note. */
@@ -244,13 +258,14 @@ export class ChatView extends ItemView {
     }).open();
   }
 
-  private insert(text: string): void {
+  /** Puts text at the cursor. Focuses the box unless `focus` is false. */
+  private insert(text: string, focus = true): void {
     const input = this.inputEl;
     const at = input.selectionStart ?? input.value.length;
     const end = input.selectionEnd ?? at;
     input.value = input.value.slice(0, at) + text + input.value.slice(end);
     input.selectionStart = input.selectionEnd = at + text.length;
-    input.focus();
+    if (focus) this.focusInput();
   }
 
   /** Opens the note behind a link in a message, if it is in the vault. */
